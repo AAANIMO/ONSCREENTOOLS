@@ -84,15 +84,17 @@ class ControlPanel(QWidget):
         b.clicked.connect(self._load_puppet)
         row.addWidget(b)
         f.addRow("", row)
-        cb = QCheckBox("Eyes follow the mouse")
-        cb.setChecked(cfg.follow_mouse)
-        cb.toggled.connect(lambda v: set_("follow_mouse", v))
-        f.addRow("", cb)
-        cb = QCheckBox("Point at where I click")
-        cb.setToolTip("Needs Input Monitoring permission on macOS; works on X11/XWayland on Linux")
-        cb.setChecked(cfg.point_on_click)
-        cb.toggled.connect(lambda v: set_("point_on_click", v))
-        f.addRow("", cb)
+        self.toggles = {}
+        for key, label, tip in (
+                ("follow_mouse", "Eyes follow the mouse  [E]", "Toggle also with E on the mascot or the right-click menu"),
+                ("point_on_click", "Point at where I click  [F]",
+                 "Toggle also with F. Needs Input Monitoring permission on macOS; works on X11/XWayland on Linux")):
+            cb = QCheckBox(label)
+            cb.setToolTip(tip)
+            cb.setChecked(getattr(cfg, key))
+            cb.toggled.connect(lambda v, k=key: set_(k, v))
+            f.addRow("", cb)
+            self.toggles[key] = cb
         col.addWidget(g)
 
         # --- camera -------------------------------------------------------
@@ -251,6 +253,11 @@ class ControlPanel(QWidget):
         self.meter.setValue(int(level01 * 100))
         self.whisper_status.setText(status)
         self.error_label.setText(error)
+        for key, cb in self.toggles.items():
+            if cb.isChecked() != getattr(self.ctl.cfg, key):
+                cb.blockSignals(True)
+                cb.setChecked(getattr(self.ctl.cfg, key))
+                cb.blockSignals(False)
         i = self.lang_combo.findData(self.ctl.cfg.language)
         if i >= 0 and i != self.lang_combo.currentIndex():
             self.lang_combo.blockSignals(True)

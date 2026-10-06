@@ -137,6 +137,8 @@ class Controller:
         elif key == "vcam":
             self._sync_vcam()
         elif key == "point_on_click":
+            if not value:
+                self.pointer.point.t0 = None  # drop the arm right away
             self._sync_clicks()
         elif key == "hide_after":
             self.subs.hide_after = value
@@ -348,6 +350,9 @@ class Controller:
             a.setChecked(cfg.language == code)
             a.triggered.connect(lambda _=False, c=code: self.set("language", c))
         menu.addSeparator()
+        add("Eyes follow the mouse\tE", lambda: self.set("follow_mouse", not cfg.follow_mouse), cfg.follow_mouse)
+        add("Point at clicks\tF", lambda: self.set("point_on_click", not cfg.point_on_click), cfg.point_on_click)
+        menu.addSeparator()
         add("Click-through", lambda: self.set("click_through", not cfg.click_through), cfg.click_through)
         add("Controls…", self.show_panel)
         menu.addSeparator()
@@ -392,6 +397,10 @@ class Controller:
         elif k == Qt.Key_S:
             order = ["off", "bubble", "bottom"]
             self.set("subtitles", order[(order.index(cfg.subtitles) + 1) % 3])
+        elif k == Qt.Key_E:
+            self.set("follow_mouse", not cfg.follow_mouse)
+        elif k == Qt.Key_F:
+            self.set("point_on_click", not cfg.point_on_click)
         elif k == Qt.Key_C:
             self.clear_subtitles()
         elif k == Qt.Key_P:
@@ -439,6 +448,10 @@ def parse_args(argv=None):
     ap.add_argument("--size", type=int, help="mascot height in pixels")
     ap.add_argument("--window-bg", help="'transparent' or a colour like '#00b140' for keying in OBS")
     ap.add_argument("--vcam", action="store_true", help="also publish as a virtual camera (pyvirtualcam)")
+    ap.add_argument("--follow-mouse", action=argparse.BooleanOptionalAction, default=None,
+                    help="puppet's eyes follow the cursor (--no-follow-mouse to turn off)")
+    ap.add_argument("--point", action=argparse.BooleanOptionalAction, default=None,
+                    help="puppet points at your clicks (--no-point to turn off)")
     ap.add_argument("--no-panel", action="store_true", help="start without the control panel")
     ap.add_argument("--list-devices", action="store_true", help="list microphones and exit")
     ap.add_argument("--export-puppet", nargs=2, metavar=("PRESET", "DIR"),
@@ -487,6 +500,10 @@ def main(argv=None):
         cfg.mascot_size = args.size
     if args.window_bg:
         cfg.window_bg = args.window_bg
+    if args.follow_mouse is not None:
+        cfg.follow_mouse = args.follow_mouse
+    if args.point is not None:
+        cfg.point_on_click = args.point
     if args.vcam:
         cfg.vcam = True
 

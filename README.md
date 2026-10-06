@@ -59,6 +59,7 @@ onscreen --camera --bg ai              # you, background removed by AI
 onscreen --camera 1 --bg chroma        # camera #1 in front of a green screen
 onscreen --subs bottom --lang en       # bottom subtitles, English (default: Italian)
 onscreen --model large-v3-turbo        # more accurate (needs a decent machine)
+onscreen --no-point --no-follow-mouse  # puppet ignores the mouse
 onscreen --list-devices                # list microphones
 ```
 
@@ -76,6 +77,8 @@ On the mascot itself:
 | double-click, `P` | open the control panel |
 | `M` | switch between puppet and camera |
 | `S` | cycle subtitles: off, bubble, bottom |
+| `E` | eyes follow the mouse: on/off |
+| `F` | point at clicks: on/off |
 | `C` | clear subtitles |
 | `Ctrl/Cmd+Q` | quit |
 
@@ -83,8 +86,9 @@ On the mascot itself:
 glide toward the cursor and the head leans slightly toward it. A second after
 the mouse stops, they drift back to looking straight ahead. When you click
 anywhere on screen, the puppet raises the arm on that side and points at the
-spot for about 1.5 seconds. Turn either off in the control panel (*Eyes follow
-the mouse*, *Point at where I click*). Clicks are read with a global hook
+spot for about 1.5 seconds. Both are toggles: `E` and `F` on the mascot, the
+right-click menu, the control panel, or `--no-follow-mouse` / `--no-point` at
+startup. The choice is remembered. Clicks are read with a global hook
 (`pynput`). On Linux that works on X11 and XWayland; native Wayland apps don't
 report clicks to other programs. Photo and custom-art puppets don't follow the
 mouse.

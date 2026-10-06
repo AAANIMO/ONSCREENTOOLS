@@ -73,10 +73,11 @@ On the mascot itself:
 |---|---|
 | drag | move it |
 | scroll wheel, `+` / `-` | resize |
-| right-click | menu: puppet/camera, subtitle style, click-through, quit |
+| right-click | menu: puppet/camera, subtitles on/off and style, language, mouse toggles, click-through, quit |
 | double-click, `P` | open the control panel |
 | `M` | switch between puppet and camera |
-| `S` | cycle subtitles: off, bubble, bottom |
+| `S` | subtitles on/off (Whisper stays loaded, so it's instant) |
+| `B` | subtitle style: comic bubble or bottom of screen |
 | `E` | eyes follow the mouse: on/off |
 | `F` | point at clicks: on/off |
 | `C` | clear subtitles |

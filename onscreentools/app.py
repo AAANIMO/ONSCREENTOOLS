@@ -115,7 +115,14 @@ class Controller:
             self._update_fonts()
             self.mascot_window.relayout()
             self._sync_subtitle_bar()
+        elif key == "subtitle_style":
+            if cfg.subtitles != "off":
+                self.set("subtitles", value)
         elif key == "subtitles":
+            if value != "off":
+                cfg.subtitle_style = value
+            else:
+                self.subs.clear()
             self._sync_transcriber()
             self.mascot_window.relayout()
             self._sync_subtitle_bar()
@@ -166,13 +173,17 @@ class Controller:
         from .transcriber import Transcriber, make_backend
 
         want = self.cfg.subtitles != "off"
+        if self.transcriber and not restart:
+            # toggling: pause instead of unloading, so switching back on is instant
+            self.transcriber.paused = not want
+            return
         if self.transcriber and (restart or not want):
             self.transcriber.stop()
             self.transcriber = None
             self.audio.unsubscribe(self._whisper_q)
             self._whisper_q = None
         if want and self.transcriber is None:
-            cfg = self.cfg
+            cfg = self.cfg  # (loads the model; a later toggle-off only pauses it)
             self._whisper_q = self.audio.subscribe()
             self.transcriber = Transcriber(
                 self._whisper_q,
@@ -248,6 +259,10 @@ class Controller:
             cursor = eyes  # nothing to look at: eyes stay straight
         self.frame.pose = self.pointer.update(now, dt, cursor, eyes)
 
+    def toggle_subtitles(self):
+        cfg = self.cfg
+        self.set("subtitles", "off" if cfg.subtitles != "off" else (cfg.subtitle_style or "bubble"))
+
     def sample_key_color(self):
         if self.camera:
             self.camera.pick_request = True
@@ -308,6 +323,8 @@ class Controller:
         if self.transcriber is None:
             return "off"
         st = self.transcriber.status
+        if self.transcriber.paused:
+            return "off (model stays loaded, S turns it back on instantly)"
         if st == "loading":
             return f"loading '{self.cfg.whisper_model}' (first run downloads it)…"
         if st == "ready":
@@ -338,9 +355,11 @@ class Controller:
         add("Puppet", lambda: self.set("mascot", "puppet"), cfg.mascot == "puppet")
         add("Me (camera)", lambda: self.set("mascot", "camera"), cfg.mascot == "camera")
         menu.addSeparator()
-        add("Subtitles: off", lambda: self.set("subtitles", "off"), cfg.subtitles == "off")
-        add("Subtitles: comic bubble", lambda: self.set("subtitles", "bubble"), cfg.subtitles == "bubble")
-        add("Subtitles: bottom", lambda: self.set("subtitles", "bottom"), cfg.subtitles == "bottom")
+        add("Subtitles\tS", self.toggle_subtitles, cfg.subtitles != "off")
+        add("   style: comic bubble\tB", lambda: self.set("subtitle_style", "bubble"),
+            cfg.subtitle_style == "bubble")
+        add("   style: bottom of screen\tB", lambda: self.set("subtitle_style", "bottom"),
+            cfg.subtitle_style == "bottom")
         from .panel import LANGUAGES
 
         lang_menu = menu.addMenu("Spoken language")
@@ -394,9 +413,10 @@ class Controller:
             self.app.quit()
         elif k == Qt.Key_M:
             self.set("mascot", "camera" if cfg.mascot == "puppet" else "puppet")
+        elif k == Qt.Key_B:
+            self.set("subtitle_style", "bottom" if cfg.subtitle_style == "bubble" else "bubble")
         elif k == Qt.Key_S:
-            order = ["off", "bubble", "bottom"]
-            self.set("subtitles", order[(order.index(cfg.subtitles) + 1) % 3])
+            self.toggle_subtitles()
         elif k == Qt.Key_E:
             self.set("follow_mouse", not cfg.follow_mouse)
         elif k == Qt.Key_F:
@@ -492,6 +512,8 @@ def main(argv=None):
         cfg.bg_removal = args.bg
     if args.subs:
         cfg.subtitles = args.subs
+        if args.subs != "off":
+            cfg.subtitle_style = args.subs
     if args.model:
         cfg.whisper_model = args.model
     if args.lang:

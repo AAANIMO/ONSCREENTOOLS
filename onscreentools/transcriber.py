@@ -133,6 +133,7 @@ class Transcriber:
         self.max_utterance = max_utterance
         self.out: queue.Queue = queue.Queue()
         self.status = "loading"
+        self.paused = False   # subtitles toggled off: keep the model loaded, skip the work
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.backend = None
@@ -228,6 +229,9 @@ class Transcriber:
             try:
                 chunk = self.audio_q.get(timeout=0.1)
             except queue.Empty:
+                continue
+            if self.paused:
+                self._reset_utterance()
                 continue
             self.feed(chunk)
             # drain everything already waiting (we may be behind real time)

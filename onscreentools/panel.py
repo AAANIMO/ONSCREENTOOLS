@@ -158,8 +158,14 @@ class ControlPanel(QWidget):
         # --- subtitles ----------------------------------------------------
         g = QGroupBox("Live subtitles (Whisper)")
         f = QFormLayout(g)
-        f.addRow("Mode", _combo([("Off", "off"), ("Comic bubble", "bubble"), ("Bottom of screen", "bottom")],
-                                cfg.subtitles, lambda v: set_("subtitles", v)))
+        self.subs_toggle = QCheckBox("Show subtitles  [S]")
+        self.subs_toggle.setChecked(cfg.subtitles != "off")
+        self.subs_toggle.toggled.connect(lambda v: ctl.toggle_subtitles() if v != (ctl.cfg.subtitles != "off") else None)
+        f.addRow("", self.subs_toggle)
+        self.style_combo = _combo([("Comic bubble", "bubble"), ("Bottom of screen", "bottom")],
+                                  cfg.subtitle_style, lambda v: set_("subtitle_style", v))
+        self.style_combo.setToolTip("Switch also with B on the mascot")
+        f.addRow("Style  [B]", self.style_combo)
         f.addRow("Bubble side", _combo([("Right of mascot", "right"), ("Left of mascot", "left")],
                                        cfg.bubble_side, lambda v: set_("bubble_side", v)))
         f.addRow("Model", _combo([(m, m) for m in WHISPER_MODELS], cfg.whisper_model,
@@ -258,6 +264,16 @@ class ControlPanel(QWidget):
                 cb.blockSignals(True)
                 cb.setChecked(getattr(self.ctl.cfg, key))
                 cb.blockSignals(False)
+        on = self.ctl.cfg.subtitles != "off"
+        if self.subs_toggle.isChecked() != on:
+            self.subs_toggle.blockSignals(True)
+            self.subs_toggle.setChecked(on)
+            self.subs_toggle.blockSignals(False)
+        i = self.style_combo.findData(self.ctl.cfg.subtitle_style)
+        if i >= 0 and i != self.style_combo.currentIndex():
+            self.style_combo.blockSignals(True)
+            self.style_combo.setCurrentIndex(i)
+            self.style_combo.blockSignals(False)
         i = self.lang_combo.findData(self.ctl.cfg.language)
         if i >= 0 and i != self.lang_combo.currentIndex():
             self.lang_combo.blockSignals(True)

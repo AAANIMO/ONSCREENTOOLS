@@ -53,6 +53,7 @@ class Config:
 
     # subtitles
     subtitles: str = "bubble"             # "off" | "bottom" | "bubble"
+    subtitle_style: str = "bubble"        # style used when subtitles are toggled back on
     whisper_backend: str = "auto"         # "auto" | "faster-whisper" | "mlx"
     whisper_model: str = "small"
     language: str | None = "it"           # spoken language ("it", "en", ...); None = auto-detect (unreliable)
@@ -83,6 +84,8 @@ class Config:
         for k, v in data.items():
             if k in known:
                 setattr(cfg, k, v)
+        if cfg.subtitles in ("bubble", "bottom"):
+            cfg.subtitle_style = cfg.subtitles
         if data.get("config_version", 1) < 2:
             # v1 defaulted to auto-detect, which hops between languages mid-sentence
             if data.get("language") is None:

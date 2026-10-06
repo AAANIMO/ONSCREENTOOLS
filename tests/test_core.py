@@ -421,3 +421,31 @@ def test_puppet_pose_changes_drawing(qapp):
     assert render(Pose()) == base
     assert render(Pose(look_x=1.0)) != base
     assert render(Pose(point_amount=1.0, point_angle=-math.pi / 4, point_side="right")) != base
+
+
+# ---------------------------------------------------------------- subtitle toggle
+def test_subtitle_style_remembered_from_old_config(tmp_path):
+    (tmp_path / "c.json").write_text('{"subtitles": "bottom"}')
+    c = Config.load(tmp_path / "c.json")
+    assert c.subtitle_style == "bottom"
+
+
+def test_paused_transcriber_skips_whisper():
+    import queue as _q
+
+    import time as _t
+
+    q = _q.Queue()
+    backend = FakeBackend()
+    tr = Transcriber(q, lambda: backend, gate_db=-50)
+    tr.paused = True
+    tr.start()
+    audio = np.concatenate([_tone(1.5), np.zeros(16000, np.float32)])
+    for i in range(0, len(audio), 320):
+        q.put(audio[i:i + 320])
+    deadline = _t.time() + 2
+    while not q.empty() and _t.time() < deadline:
+        _t.sleep(0.01)
+    _t.sleep(0.2)
+    tr.stop()
+    assert backend.calls == [] and tr.out.empty()

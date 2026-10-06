@@ -21,6 +21,8 @@ A puppet folder holds a `puppet.json`:
 
     {"type": "builtin", "base": "beanie", "hat": "#ff00aa", ...}   # recolour a preset
 
+    {"type": "canadian", "image": "me.png", ...}   # photo cut at the mouth, see cutout.py
+
 All images in a puppet share one canvas size so they line up.
 """
 from __future__ import annotations
@@ -374,6 +376,10 @@ def load_puppet(spec: str) -> Puppet:
             style = dict(PRESETS.get(meta.get("base", "beanie"), PRESETS["beanie"]))
             style.update({k: v for k, v in meta.items() if k not in ("type", "base")})
             return BuiltinPuppet(style)
+        if meta.get("type") == "canadian":
+            from .cutout import CanadianPuppet
+
+            return CanadianPuppet.from_folder(folder, meta)
         return ImagePuppet(folder)
     raise ValueError(f"unknown puppet '{spec}': use one of {', '.join(PRESETS)} or a folder with puppet.json")
 

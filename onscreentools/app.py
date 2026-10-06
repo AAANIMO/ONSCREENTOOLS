@@ -88,8 +88,8 @@ class Controller:
         self.font = self._pick_font(self.cfg.font_family, self.cfg.font_size)
         self.bottom_font = self._pick_font(self.cfg.font_family, int(self.cfg.font_size * 1.5))
 
-    def set(self, key: str, value):
-        if getattr(self.cfg, key) == value:
+    def set(self, key: str, value, force: bool = False):
+        if getattr(self.cfg, key) == value and not force:
             return
         setattr(self.cfg, key, value)
         cfg = self.cfg
@@ -362,6 +362,8 @@ def parse_args(argv=None):
         description="A talking on-screen mascot for tutorials: a lip-synced cutout puppet or you "
                     "from the webcam, with live Whisper subtitles.")
     ap.add_argument("--puppet", help="preset name (beanie, pompom, hood, hair, redhead) or puppet folder")
+    ap.add_argument("--cutout", metavar="PNG",
+                    help="make a South Park Canadian-style puppet from a photo/PNG cutout (opens the editor)")
     ap.add_argument("--camera", nargs="?", const=-1, type=int, metavar="INDEX",
                     help="show yourself from the webcam instead of the puppet")
     ap.add_argument("--bg", choices=["none", "chroma", "ai"], help="camera background removal")
@@ -424,6 +426,13 @@ def main(argv=None):
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName("onscreen")
+    if args.cutout:
+        from .cutout import open_editor
+
+        folder = open_editor(path=args.cutout)
+        if folder is None:
+            return 0
+        cfg.puppet, cfg.mascot = str(folder), "puppet"
     app.setQuitOnLastWindowClosed(False)
     app._controller = Controller(cfg, show_panel=not args.no_panel)  # keep a reference
     import signal

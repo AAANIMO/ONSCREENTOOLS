@@ -7,6 +7,10 @@ talks when you talk.
 - **Puppet mode.** A construction-paper cutout kid whose jaw flaps in sync
   with your mic. It blinks, bobs and wobbles its head while talking. Pick one
   of five built-in characters or bring your own art.
+- **Photo cutout, Canadian style.** Load a PNG of a person (or any photo, and
+  the AI removes the background), drag the cut onto the mouth, and the whole top
+  of the head flaps open and bounces around chaotically while you talk, like
+  Terrance & Phillip.
 - **Camera mode.** You, from the webcam, with the background removed by a
   **green screen** (chroma key with spill suppression) or by **AI** (MediaPipe
   selfie segmentation, no green screen needed). You can show the full frame,
@@ -21,6 +25,7 @@ It runs natively on **macOS** and **Linux**. Windows isn't supported.
 ![puppets](docs/puppets.png)
 ![bubbles](docs/bubbles.png)
 ![camera](docs/camera.png)
+![canadian](docs/canadian.png)
 
 ## Install
 
@@ -87,6 +92,27 @@ tray/menu-bar icon.
   OBS, Zoom or Meet. It needs OBS's virtual camera on macOS, or
   `v4l2loopback` on Linux (`sudo modprobe v4l2loopback devices=1 exclusive_caps=1`).
 
+## Photo cutout puppet (Canadian style)
+
+```bash
+onscreen --cutout ~/Pictures/me.png
+```
+
+Or click **New from PNG…** in the control panel. In the editor:
+
+1. Drag the **red** handle onto the corner of the mouth.
+2. Drag the **blue** handle to the back of the head, around the ear. That's the
+   hinge the head opens around. Everything above the line flaps.
+3. Set the **opening angle** and the **chaos** (0 is a clean flap, 2 is
+   maniacal), and pick the mouth colour. The preview on the right shows it
+   talking; untick *Simulate talking* to drive it with your mic.
+4. If the photo has no transparency, click **Remove background (AI)**.
+5. Save. The puppet goes into `puppets/<name>` in the config folder and shows up
+   in the *Character* list as "(mine)".
+
+Works best with a profile or three-quarter photo, face looking sideways,
+cropped at the chest.
+
 ## Make your own puppet
 
 Export a built-in one as PNGs, repaint it in Krita, GIMP or Photoshop, and load
@@ -124,6 +150,21 @@ fraction of the canvas. The speech-bubble tail points at it.
 ```
 
 `head.png` has the mouth area cut out. `max_drop` is a fraction of the image height.
+
+**Canadian cutout** is what the editor writes. You can also write it by hand:
+
+```json
+{"type": "canadian",
+ "image": "image.png",
+ "front": [0.42, 0.55],
+ "hinge": [0.70, 0.50],
+ "max_angle": 28,
+ "chaos": 1.0,
+ "mouth_color": "#1a0505"}
+```
+
+`front` is the mouth corner and `hinge` the back of the head, both as fractions
+of the image.
 
 **Recolour a built-in puppet:**
 

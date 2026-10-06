@@ -68,14 +68,21 @@ class ControlPanel(QWidget):
         # --- puppet -------------------------------------------------------
         g = QGroupBox("Puppet")
         f = QFormLayout(g)
+        from .cutout import user_puppets
+
         items = [(name.capitalize(), name) for name in PRESETS]
+        items += [(f"{d.name} (mine)", str(d)) for d in user_puppets()]
         self.puppet_combo = _combo(items, cfg.puppet, lambda v: set_("puppet", v))
+        f.addRow("Character", self.puppet_combo)
         row = QHBoxLayout()
-        row.addWidget(self.puppet_combo, 1)
+        b = QPushButton("New from PNG…")
+        b.setToolTip("Cut a photo at the mouth and make the top of the head flap, South Park Canadian style")
+        b.clicked.connect(self._new_cutout)
+        row.addWidget(b)
         b = QPushButton("Load folder…")
         b.clicked.connect(self._load_puppet)
         row.addWidget(b)
-        f.addRow("Character", row)
+        f.addRow("", row)
         col.addWidget(g)
 
         # --- camera -------------------------------------------------------
@@ -194,12 +201,26 @@ class ControlPanel(QWidget):
         root.addWidget(self.error_label)
 
     # -- callbacks --------------------------------------------------------
+    def _new_cutout(self):
+        from .cutout import open_editor
+
+        folder = open_editor(self, self.ctl)
+        if folder:
+            self._select_puppet(str(folder))
+
     def _load_puppet(self):
         folder = QFileDialog.getExistingDirectory(self, "Choose a puppet folder (with puppet.json)")
+        self._select_puppet(folder)
+
+    def _select_puppet(self, folder):
         if folder:
             if self.puppet_combo.findData(folder) < 0:
                 self.puppet_combo.addItem(folder.rstrip("/").split("/")[-1] + " (folder)", folder)
+            self.puppet_combo.blockSignals(True)
             self.puppet_combo.setCurrentIndex(self.puppet_combo.findData(folder))
+            self.puppet_combo.blockSignals(False)
+            self.ctl.set("puppet", folder, force=True)  # reloads even when re-saving the same folder
+            self.ctl.set("mascot", "puppet")
 
     def _paint_key_btn(self):
         r, g, b = self.ctl.cfg.chroma_color

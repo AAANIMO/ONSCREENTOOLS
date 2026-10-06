@@ -228,3 +228,67 @@ def test_bubble_and_bottom_subtitles_paint(qapp):
     p.end()
     assert rect is not None and rect.width() <= 400 and rect.top() >= 0
     assert img.pixelColor(int(rect.center().x()), int(rect.center().y())).alpha() == 255
+
+
+# ---------------------------------------------------------------- canadian cutout
+def _person(qapp):
+    from PySide6.QtCore import QRectF, Qt
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    img = QImage(200, 250, QImage.Format_ARGB32_Premultiplied)
+    img.fill(Qt.transparent)
+    p = QPainter(img)
+    p.setBrush(QColor("#e8b48f"))
+    p.drawEllipse(QRectF(50, 20, 100, 130))
+    p.setBrush(QColor("#3355aa"))
+    p.drawRect(QRectF(30, 160, 140, 90))
+    p.end()
+    return img
+
+
+@pytest.mark.parametrize("front_x,hinge_x", [(0.35, 0.7), (0.7, 0.35)])
+def test_canadian_head_front_goes_up(qapp, front_x, hinge_x):
+    from onscreentools.cutout import CanadianPuppet
+
+    pup = CanadianPuppet(_person(qapp), [front_x, 0.45], [hinge_x, 0.43], chaos=0.0)
+    T = pup.head_transform(1.0, 0.0)
+    moved = T.map(pup.front)
+    assert moved.y() < pup.front.y() - 20      # the face side lifts
+    assert T.map(pup.hinge) == pup.hinge        # the hinge stays put
+
+
+def test_canadian_closed_is_the_plain_image_and_open_shows_mouth(qapp):
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    from onscreentools.cutout import CanadianPuppet
+
+    src = _person(qapp)
+    pup = CanadianPuppet(src, [0.35, 0.45], [0.7, 0.43], mouth_color="#ff0000")
+
+    def render(o):
+        img = QImage(200, 250, QImage.Format_ARGB32_Premultiplied)
+        img.fill(0)
+        p = QPainter(img)
+        pup.draw(p, QRectF(0, 0, 200, 250), o, 0.0, 0.0)
+        p.end()
+        return img
+
+    closed, opened = render(0.0), render(1.0)
+    assert closed != opened
+    reds = sum(1 for y in range(0, 250, 2) for x in range(0, 200, 2)
+               if opened.pixelColor(x, y) == QColor("#ff0000"))
+    assert reds > 20
+
+
+def test_canadian_save_and_load(qapp, tmp_path):
+    from onscreentools.cutout import CanadianPuppet, guess_cut, save_cutout
+    from onscreentools.puppet import load_puppet
+
+    img = _person(qapp)
+    front, hinge = guess_cut(img)
+    assert 0 < front[0] < hinge[0] < 1
+    folder = save_cutout(img, "Mr Test!", front, hinge, 30, 1.5, "#110000", root=tmp_path)
+    assert folder.name == "Mr-Test"
+    pup = load_puppet(str(folder))
+    assert isinstance(pup, CanadianPuppet) and pup.max_angle == 30 and pup.chaos == 1.5

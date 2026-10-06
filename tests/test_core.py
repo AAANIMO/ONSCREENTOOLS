@@ -246,15 +246,39 @@ def _person(qapp):
     return img
 
 
-@pytest.mark.parametrize("front_x,hinge_x", [(0.35, 0.7), (0.7, 0.35)])
-def test_canadian_head_front_goes_up(qapp, front_x, hinge_x):
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_canadian_head_lifts_the_free_end(qapp, side):
     from onscreentools.cutout import CanadianPuppet
 
-    pup = CanadianPuppet(_person(qapp), [front_x, 0.45], [hinge_x, 0.43], chaos=0.0)
-    T = pup.head_transform(1.0, 0.0)
-    moved = T.map(pup.front)
-    assert moved.y() < pup.front.y() - 20      # the face side lifts
-    assert T.map(pup.hinge) == pup.hinge        # the hinge stays put
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45], chaos=0.0, pivot=side)
+    pivot, free = (pup.left, pup.right) if side == "left" else (pup.right, pup.left)
+    T = pup.head_transform(1.0, 0.0, side)
+    assert T.map(free).y() < free.y() - 20     # the other end of the mouth lifts
+    assert T.map(pivot) == pivot               # the pivot end stays put
+
+
+def test_canadian_random_pivot_uses_both_sides(qapp):
+    from onscreentools.cutout import CanadianPuppet
+
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45])
+    sides = set()
+    t = 0.0
+    for syllable in range(40):          # open/close like speech
+        for o in (0.0, 0.8, 0.8, 0.0):
+            t += 0.06
+            pup._update_side(o, t)
+            if o:
+                sides.add(pup._side)
+    assert sides == {"left", "right"}
+
+
+def test_canadian_fixed_pivot_never_switches(qapp):
+    from onscreentools.cutout import CanadianPuppet
+
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45], pivot="right")
+    for i in range(100):
+        pup._update_side(0.8 if i % 3 else 0.0, i * 0.1)
+        assert pup._side == "right"
 
 
 def test_canadian_closed_is_the_plain_image_and_open_shows_mouth(qapp):
@@ -264,7 +288,8 @@ def test_canadian_closed_is_the_plain_image_and_open_shows_mouth(qapp):
     from onscreentools.cutout import CanadianPuppet
 
     src = _person(qapp)
-    pup = CanadianPuppet(src, [0.35, 0.45], [0.7, 0.43], mouth_color="#ff0000")
+    pup = CanadianPuppet(src, [0.35, 0.45], [0.7, 0.43], mouth_color="#ff0000", mouth_fill=True)
+    see_through = CanadianPuppet(src, [0.35, 0.45], [0.7, 0.43], mouth_color="#ff0000")
 
     def render(o):
         img = QImage(200, 250, QImage.Format_ARGB32_Premultiplied)
@@ -276,9 +301,14 @@ def test_canadian_closed_is_the_plain_image_and_open_shows_mouth(qapp):
 
     closed, opened = render(0.0), render(1.0)
     assert closed != opened
-    reds = sum(1 for y in range(0, 250, 2) for x in range(0, 200, 2)
-               if opened.pixelColor(x, y) == QColor("#ff0000"))
-    assert reds > 20
+
+    def reds(img):
+        return sum(1 for y in range(0, 250, 2) for x in range(0, 200, 2)
+                   if img.pixelColor(x, y) == QColor("#ff0000"))
+
+    assert reds(opened) > 20
+    pup = see_through                   # default: no fill, the gap is transparent
+    assert reds(render(1.0)) == 0
 
 
 def test_canadian_save_and_load(qapp, tmp_path):
@@ -286,12 +316,27 @@ def test_canadian_save_and_load(qapp, tmp_path):
     from onscreentools.puppet import load_puppet
 
     img = _person(qapp)
-    front, hinge = guess_cut(img)
-    assert 0 < front[0] < hinge[0] < 1
-    folder = save_cutout(img, "Mr Test!", front, hinge, 30, 1.5, "#110000", root=tmp_path)
+    a, b = guess_cut(img)
+    assert 0 < a[0] < b[0] < 1 and a[1] == b[1]
+    folder = save_cutout(img, "Mr Test!", a, b, 30, 1.5, "#110000", root=tmp_path, pivot="left")
     assert folder.name == "Mr-Test"
     pup = load_puppet(str(folder))
     assert isinstance(pup, CanadianPuppet) and pup.max_angle == 30 and pup.chaos == 1.5
+    assert pup.pivot_mode == "left" and pup.mouth_fill is False
+
+
+def test_canadian_old_front_hinge_files_still_load(qapp, tmp_path):
+    import json as _json
+
+    from onscreentools.cutout import CanadianPuppet
+    from onscreentools.puppet import load_puppet
+
+    _person(qapp).save(str(tmp_path / "image.png"))
+    (tmp_path / "puppet.json").write_text(_json.dumps(
+        {"type": "canadian", "image": "image.png", "front": [0.7, 0.5], "hinge": [0.3, 0.5]}))
+    pup = load_puppet(str(tmp_path))
+    assert isinstance(pup, CanadianPuppet) and pup.pivot_mode == "random"
+    assert pup.left.x() < pup.right.x()
 
 
 # ---------------------------------------------------------------- language

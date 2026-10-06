@@ -118,18 +118,22 @@ onscreen --cutout ~/Pictures/me.png
 
 Or click **New from PNG…** in the control panel. In the editor:
 
-1. Drag the **red** handle onto the corner of the mouth.
-2. Drag the **blue** handle to the back of the head, around the ear. That's the
-   hinge the head opens around. Everything above the line flaps.
-3. Set the **opening angle** and the **chaos** (0 is a clean flap, 2 is
-   maniacal), and pick the mouth colour. The preview on the right shows it
-   talking; untick *Simulate talking* to drive it with your mic.
-4. If the photo has no transparency, click **Remove background (AI)**.
+1. Drag the two **red** handles onto the mouth line, one on each side of the
+   face. Everything above the line flaps.
+2. **Pivot:** by default the head pivots on one end of the line or the other,
+   picked at random on every syllable, so it jerks and hops from side to side.
+   You can also lock it to the left or right end.
+3. Set the **opening angle** and **chaos / hop** (0 is a clean flap, 2 is
+   maniacal hopping). The preview on the right shows it talking; untick
+   *Simulate talking* to drive it with your mic.
+4. The gap under the lifted head is **see-through** by default. Tick *Dark
+   mouth* to paint it with a colour. If the photo itself has no transparency,
+   click **Remove background (AI)**.
 5. Save. The puppet goes into `puppets/<name>` in the config folder and shows up
    in the *Character* list as "(mine)".
 
-Works best with a profile or three-quarter photo, face looking sideways,
-cropped at the chest.
+Works with front-facing photos as well as profiles. Crop at the chest for the
+best size on screen.
 
 ## Make your own puppet
 
@@ -174,15 +178,17 @@ fraction of the canvas. The speech-bubble tail points at it.
 ```json
 {"type": "canadian",
  "image": "image.png",
- "front": [0.42, 0.55],
- "hinge": [0.70, 0.50],
+ "a": [0.30, 0.55],
+ "b": [0.75, 0.53],
+ "pivot": "random",
  "max_angle": 28,
  "chaos": 1.0,
+ "mouth_fill": false,
  "mouth_color": "#1a0505"}
 ```
 
-`front` is the mouth corner and `hinge` the back of the head, both as fractions
-of the image.
+`a` and `b` are the two ends of the mouth line, as fractions of the image.
+`pivot` is `random`, `left` or `right`.
 
 **Recolour a built-in puppet:**
 

@@ -98,7 +98,8 @@ class CanadianPuppet(Puppet):
         s = r.width() / self.w
         return QPointF(r.left() + self.front.x() * s, r.top() + self.front.y() * s)
 
-    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float) -> None:
+    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float,
+             pose=None) -> None:
         r = fit_rect(rect, self.aspect)
         s = r.width() / self.w
         o = max(0.0, min(1.0, openness))

@@ -77,12 +77,21 @@ class Blinker:
 
 class Puppet:
     aspect = _UW / _UH  # width / height
+    face_aspect = None  # width/height of the character itself, if aspect includes margins
+    can_pose = False    # True if it follows the mouse / points (see pointer.Pose)
 
-    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float) -> None:
+    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float,
+             pose=None) -> None:
         raise NotImplementedError
 
     def mouth_anchor(self, rect: QRectF) -> QPointF:
         return QPointF(rect.center().x(), rect.top() + rect.height() * 0.5)
+
+    def eye_anchor(self, rect: QRectF) -> QPointF:
+        return self.mouth_anchor(rect)
+
+    def shoulder_anchor(self, rect: QRectF, side: str) -> QPointF:
+        return self.mouth_anchor(rect)
 
 
 def fit_rect(outer: QRectF, aspect: float) -> QRectF:
@@ -95,7 +104,25 @@ def fit_rect(outer: QRectF, aspect: float) -> QRectF:
     return QRectF(outer.center().x() - w / 2, outer.bottom() - h, w, h)
 
 
+# arm geometry (unit coords): shoulder, and the resting hand hangs this far below
+_SHOULDER = {"left": (23.0, 80.0), "right": (77.0, 80.0)}
+_ARM_LEN = 16.0
+
+
+def _angle_lerp(a: float, b: float, k: float) -> float:
+    d = (b - a + math.pi) % (2 * math.pi) - math.pi
+    return a + d * k
+
+
+# side margin (unit coords) so a pointing arm stays inside the window
+_PAD = 22.0
+
+
 class BuiltinPuppet(Puppet):
+    can_pose = True
+    aspect = (_UW + 2 * _PAD) / _UH
+    face_aspect = _UW / _UH
+
     def __init__(self, style: dict | str = "beanie"):
         if isinstance(style, str):
             style = PRESETS.get(style, PRESETS["beanie"])
@@ -119,14 +146,33 @@ class BuiltinPuppet(Puppet):
         path.closeSubpath()
         return path
 
-    def mouth_anchor(self, rect: QRectF) -> QPointF:
+    def _box(self, rect: QRectF) -> QRectF:
+        """The 100x120 drawing box inside the padded rect."""
         r = fit_rect(rect, self.aspect)
-        return QPointF(r.left() + r.width() * 0.5, r.top() + r.height() * (60 / _UH))
+        s = r.height() / _UH
+        return QRectF(r.left() + _PAD * s, r.top(), _UW * s, r.height())
+
+    def _unit(self, rect: QRectF, x: float, y: float) -> QPointF:
+        r = self._box(rect)
+        return QPointF(r.left() + r.width() * x / _UW, r.top() + r.height() * y / _UH)
+
+    def mouth_anchor(self, rect: QRectF) -> QPointF:
+        return self._unit(rect, 50, 60)
+
+    def eye_anchor(self, rect: QRectF) -> QPointF:
+        return self._unit(rect, 50, 41)
+
+    def shoulder_anchor(self, rect: QRectF, side: str) -> QPointF:
+        return self._unit(rect, *_SHOULDER[side])
 
     # -- drawing ---------------------------------------------------------
-    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float) -> None:
-        r = fit_rect(rect, self.aspect)
+    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float,
+             pose=None) -> None:
+        r = self._box(rect)
         o = max(0.0, min(1.0, openness))
+        look_x = pose.look_x if pose else 0.0
+        look_y = pose.look_y if pose else 0.0
+        pointing = pose.point_side if pose and pose.point_amount > 0.001 else None
         p.save()
         p.setRenderHint(QPainter.Antialiasing, True)
         p.translate(r.left(), r.top())
@@ -134,18 +180,48 @@ class BuiltinPuppet(Puppet):
 
         # idle breathing + a little hop while talking
         bob = math.sin(t * 2.2) * 0.6 - o * 2.0
-        self._draw_body(p, bob * 0.4)
+        self._draw_body(p, bob * 0.4, skip_arm=pointing)
+        p.save()
         p.translate(0, bob)
 
-        # head wobbles around the neck while talking
-        tilt = math.sin(t * 7.3) * o * 3.5 + math.sin(t * 0.9) * 1.2
+        # head wobbles around the neck while talking, and leans toward where it looks
+        tilt = math.sin(t * 7.3) * o * 3.5 + math.sin(t * 0.9) * 1.2 + look_x * 4.0
         p.translate(50, 74)
         p.rotate(tilt)
-        p.translate(-50, -74)
-        self._draw_head(p, o, blink)
+        p.translate(-50 - look_x * 1.5, -74)
+        self._draw_head(p, o, blink, look_x, look_y)
+        p.restore()
+        if pointing:
+            # in front of the head, so an arm pointing up isn't hidden
+            self._draw_pointing_arm(p, bob * 0.4, pose)
         p.restore()
 
-    def _draw_body(self, p: QPainter, dy: float):
+    def _draw_pointing_arm(self, p: QPainter, dy: float, pose):
+        c, side = self.c, pose.point_side
+        sx, sy = _SHOULDER[side]
+        hand_x = 22.0 if side == "left" else 78.0
+        rest = math.atan2(96.0 - sy, hand_x - sx)
+        k = pose.point_amount
+        ang = _angle_lerp(rest, pose.point_angle, min(k, 1.15))
+        length = _ARM_LEN + 6.0 * max(0.0, min(k, 1.0))
+        pen = self._pen()
+        p.save()
+        p.translate(sx, sy + dy)
+        p.rotate(math.degrees(ang))
+        p.setPen(pen)
+        p.setBrush(c["coat"])
+        p.drawRoundedRect(QRectF(-4, -5.5, length + 4, 11), 5.5, 5.5)
+        p.setBrush(c["mitten"])
+        p.drawEllipse(QPointF(length + 1.5, 0), 5.8, 5.4)
+        if k > 0.2:
+            # index finger, sticking out of the mitten
+            reach = 9.0 * min(1.0, (k - 0.2) / 0.5)
+            p.drawRoundedRect(QRectF(length + 3.5, -2.1, reach + 2.5, 4.2), 2.1, 2.1)
+            p.setPen(Qt.NoPen)
+            p.drawEllipse(QPointF(length + 1.5, 0), 4.6, 4.2)  # hide the finger's root seam
+        p.restore()
+
+    def _draw_body(self, p: QPainter, dy: float, skip_arm: str | None = None):
         c = self.c
         p.save()
         p.translate(0, dy)
@@ -174,16 +250,17 @@ class BuiltinPuppet(Puppet):
         p.setBrush(c["outline"])
         for y in (86, 94):
             p.drawEllipse(QPointF(46, y), 0.9, 0.9)
-        # arms + mittens
-        p.setBrush(c["coat"])
-        p.drawEllipse(QRectF(17, 78, 12, 16))
-        p.drawEllipse(QRectF(71, 78, 12, 16))
-        p.setBrush(c["mitten"])
-        p.drawEllipse(QPointF(22, 96), 6.2, 5.6)
-        p.drawEllipse(QPointF(78, 96), 6.2, 5.6)
+        # arms + mittens (the pointing one is drawn later, in front of the head)
+        for side, x0, hx in (("left", 17, 22), ("right", 71, 78)):
+            if side == skip_arm:
+                continue
+            p.setBrush(c["coat"])
+            p.drawEllipse(QRectF(x0, 78, 12, 16))
+            p.setBrush(c["mitten"])
+            p.drawEllipse(QPointF(hx, 96), 6.2, 5.6)
         p.restore()
 
-    def _draw_head(self, p: QPainter, o: float, blink: float):
+    def _draw_head(self, p: QPainter, o: float, blink: float, look_x: float = 0.0, look_y: float = 0.0):
         c, style = self.c, self.s.get("hat_style", "beanie")
         pen = self._pen()
         drop = o * 9.0
@@ -233,7 +310,7 @@ class BuiltinPuppet(Puppet):
             tuft.quadTo(53, 5, 54, 9)
             p.drawPath(tuft)
 
-        self._draw_eyes(p, blink)
+        self._draw_eyes(p, blink, look_x, look_y)
         self._draw_mouth(p, o, drop)
 
         if style == "hood":
@@ -252,7 +329,7 @@ class BuiltinPuppet(Puppet):
             p.drawEllipse(QPointF(44, 72 + drop), 1.6, 1.6)
             p.drawEllipse(QPointF(56, 72 + drop), 1.6, 1.6)
 
-    def _draw_eyes(self, p: QPainter, blink: float):
+    def _draw_eyes(self, p: QPainter, blink: float, look_x: float = 0.0, look_y: float = 0.0):
         c = self.c
         pen = self._pen(1.1)
         for ex, px in ((40.5, 46.0), (59.5, 54.0)):
@@ -262,7 +339,10 @@ class BuiltinPuppet(Puppet):
             p.drawEllipse(eye)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#111"))
-            p.drawEllipse(QPointF(px, 41.0), 2.2, 2.2)
+            # pupils glide inside the eye white; at rest they keep the classic cross-eyed look
+            edge = ex + math.copysign(7.0, look_x)
+            ox = px + (edge - px) * min(1.0, abs(look_x))
+            p.drawEllipse(QPointF(ox, 41.0 + look_y * 7.0), 2.2, 2.2)
             if blink > 0.01:
                 p.save()
                 clip = QPainterPath()
@@ -341,7 +421,8 @@ class ImagePuppet(Puppet):
         r = fit_rect(rect, self.aspect)
         return QPointF(r.left() + r.width() * self.mouth_pos[0], r.top() + r.height() * self.mouth_pos[1])
 
-    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float) -> None:
+    def draw(self, p: QPainter, rect: QRectF, openness: float, t: float, blink: float,
+             pose=None) -> None:
         r = fit_rect(rect, self.aspect)
         p.save()
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -406,7 +487,8 @@ def export_template(preset: str, folder: str | Path, height: int = 1200) -> Path
     for i, n in enumerate(names):
         render(n, i / (len(names) - 1), 0.0)
     # blink overlay = just the eye region with closed lids
-    render("blink.png", 0.0, 1.0, QRectF(w * 0.28, height * 27 / _UH, w * 0.44, height * 26 / _UH))
+    full = QRectF(0, 0, w, height)
+    render("blink.png", 0.0, 1.0, QRectF(pup._unit(full, 28, 27), pup._unit(full, 72, 53)))
     anchor = pup.mouth_anchor(QRectF(0, 0, w, height))
     (folder / "puppet.json").write_text(json.dumps({
         "type": "frames",

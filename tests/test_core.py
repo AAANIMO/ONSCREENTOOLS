@@ -335,3 +335,89 @@ def test_backend_uses_greedy_partials(monkeypatch):
     b(np.zeros(16000, np.float32), "", final=True)
     assert calls[0]["language"] == "it" and calls[0]["temperature"] == (0.0,)
     assert max(calls[1]["temperature"]) <= 0.4
+
+
+# ---------------------------------------------------------------- mouse: gaze + pointing
+def test_gaze_glides_instead_of_snapping():
+    from onscreentools.pointer import PointerTracker
+
+    tr = PointerTracker(reach=100)
+    eyes = (500, 500)
+    tr.update(0.0, 1 / 60, (500, 500), eyes)
+    xs = []
+    for i in range(1, 60):
+        cursor = (500 + 10 * i, 500)  # mouse moving right
+        xs.append(tr.update(i / 60, 1 / 60, cursor, eyes).look_x)
+    assert xs[0] < 0.1                        # first frame: barely moved
+    assert all(b >= a - 1e-9 for a, b in zip(xs, xs[1:]))  # smooth, monotonic
+    assert xs[-1] > 0.9                       # ...but gets there within a second
+    assert max(xs) <= 1.0 + 1e-6              # no overshoot
+
+
+def test_gaze_returns_straight_when_mouse_rests():
+    from onscreentools.pointer import PointerTracker
+
+    tr = PointerTracker(idle_after=0.5)
+    t = 0.0
+    for i in range(30):
+        t = i / 60
+        pose = tr.update(t, 1 / 60, (900 + i * 5, 100), (500, 500))
+    assert pose.look_x > 0.3 and pose.look_y < -0.1
+    for i in range(1, 120):
+        pose = tr.update(t + i / 60, 1 / 60, (1045, 100), (500, 500))
+    assert abs(pose.look_x) < 0.05 and abs(pose.look_y) < 0.05
+
+
+def test_point_animation_is_visible_but_snappy():
+    from onscreentools.pointer import PointAnim
+
+    a = PointAnim()
+    a.trigger(10.0, 0.0, "right")
+    assert 0.0 < a.amount(10.05) < 1.0        # raising, not instant
+    assert a.amount(10.0 + a.RAISE) >= 0.99   # up within ~0.2 s
+    assert a.amount(11.2) == 1.0              # held for over a second
+    assert a.amount(10.0 + a.RAISE + a.HOLD + a.LOWER + 0.01) == 0.0
+    assert not a.active
+
+
+def test_click_picks_arm_and_angle_and_eyes_follow():
+    import math
+
+    from onscreentools.pointer import PointerTracker
+
+    tr = PointerTracker()
+    shoulders = {"left": (480, 560), "right": (520, 560)}
+    tr.click(0.0, (100, 160), shoulders, (500, 500))          # up-left
+    pose = None
+    for i in range(1, 30):
+        pose = tr.update(i / 60, 1 / 60, (500, 500), (500, 500))
+    assert pose.point_side == "left" and pose.point_amount == 1.0
+    assert math.isclose(pose.point_angle, math.atan2(160 - 560, 100 - 480))
+    assert pose.look_x < -0.3 and pose.look_y < -0.2         # looks where it points
+    tr.click(1.0, (1500, 900), shoulders, (500, 500))
+    assert tr.point.side == "right"
+
+
+def test_puppet_pose_changes_drawing(qapp):
+    import math
+
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QImage, QPainter
+
+    from onscreentools.pointer import Pose
+    from onscreentools.puppet import BuiltinPuppet
+
+    pup = BuiltinPuppet("beanie")
+
+    def render(pose):
+        img = QImage(200, 240, QImage.Format_ARGB32)
+        img.fill(0)
+        p = QPainter(img)
+        pup.draw(p, QRectF(0, 0, 200, 240), 0.0, 0.0, 0.0, pose)
+        p.end()
+        return img
+
+    base = render(None)
+    assert render(Pose()) == base
+    assert render(Pose(look_x=1.0)) != base
+    assert render(Pose(point_amount=1.0, point_angle=-math.pi / 4, point_side="right")) != base

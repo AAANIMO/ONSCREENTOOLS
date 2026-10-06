@@ -84,6 +84,15 @@ class ControlPanel(QWidget):
         b.clicked.connect(self._load_puppet)
         row.addWidget(b)
         f.addRow("", row)
+        cb = QCheckBox("Eyes follow the mouse")
+        cb.setChecked(cfg.follow_mouse)
+        cb.toggled.connect(lambda v: set_("follow_mouse", v))
+        f.addRow("", cb)
+        cb = QCheckBox("Point at where I click")
+        cb.setToolTip("Needs Input Monitoring permission on macOS; works on X11/XWayland on Linux")
+        cb.setChecked(cfg.point_on_click)
+        cb.toggled.connect(lambda v: set_("point_on_click", v))
+        f.addRow("", cb)
         col.addWidget(g)
 
         # --- camera -------------------------------------------------------

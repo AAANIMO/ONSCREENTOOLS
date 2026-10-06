@@ -21,6 +21,7 @@ class Frame:
     text: str = ""
     text_opacity: float = 0.0
     status: str = ""
+    pose: object = None     # pointer.Pose: gaze + pointing arm
 
 
 def scene_layout(cfg, mascot_aspect: float, bubble: bool):
@@ -57,10 +58,10 @@ def paint_scene(p: QPainter, ctl, frame: Frame, mascot: QRectF, bubble_area: QRe
         tail_tip = QPointF(target.center().x() + (target.width() * (0.2 if cfg.bubble_side == "right" else -0.2)),
                            target.top() + target.height() * 0.35)
     else:
-        ctl.puppet.draw(p, mascot, frame.openness, frame.t, frame.blink)
+        ctl.puppet.draw(p, mascot, frame.openness, frame.t, frame.blink, frame.pose)
         # stop the tail just outside the cheek, at mouth height
         mouth = ctl.puppet.mouth_anchor(mascot)
-        face_w = min(mascot.width(), mascot.height() * ctl.puppet.aspect)
+        face_w = min(mascot.width(), mascot.height() * (ctl.puppet.face_aspect or ctl.puppet.aspect))
         dx = face_w * (0.44 if cfg.bubble_side == "right" else -0.44)
         tail_tip = QPointF(mouth.x() + dx, mouth.y() - mascot.height() * 0.06)
 

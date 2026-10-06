@@ -46,6 +46,8 @@ class Config:
 
     # audio / lipsync
     audio_device: str | None = None       # sounddevice name or index; None = system default
+    follow_mouse: bool = True             # puppet's eyes follow the cursor while it moves
+    point_on_click: bool = True           # puppet points at where you click (global hook)
     noise_gate_db: float = -50.0          # below this the mouth stays shut
     mouth_range_db: float = 28.0          # dB above the gate for a fully open mouth
 

@@ -37,6 +37,11 @@ class Controller:
             self.errors["puppet"] = str(e)
             self.puppet = BuiltinPuppet("beanie")
         self.blinker = Blinker()
+        from .pointer import ClickListener, PointerTracker
+
+        self.pointer = PointerTracker()
+        self.clicks = None
+        self._ClickListener = ClickListener
         self.mouth = MouthDriver(cfg.noise_gate_db, cfg.mouth_range_db)
         self.subs = SubtitleState(cfg.hide_after)
         self._update_fonts()
@@ -66,6 +71,7 @@ class Controller:
         self.mascot_window.show()
         self._sync_subtitle_bar()
         self._sync_vcam()
+        self._sync_clicks()
         if show_panel:
             self.show_panel()
         self._setup_tray()
@@ -130,6 +136,8 @@ class Controller:
             self.mascot_window.update()
         elif key == "vcam":
             self._sync_vcam()
+        elif key == "point_on_click":
+            self._sync_clicks()
         elif key == "hide_after":
             self.subs.hide_after = value
         self.save_soon()
@@ -191,6 +199,53 @@ class Controller:
             except Exception as e:
                 self.errors["vcam"] = f"Virtual camera: {e}"
 
+    def _sync_clicks(self):
+        if self.clicks is not None and not self.cfg.point_on_click:
+            self.clicks.stop()
+            self.clicks = None
+            self.errors.pop("clicks", None)
+        if self.cfg.point_on_click and self.clicks is None:
+            self.clicks = self._ClickListener()
+            self.clicks.start()
+            if self.clicks.error:
+                self.errors["clicks"] = self.clicks.error
+
+    def _update_pose(self, now: float, dt: float):
+        """Feed cursor + clicks to the tracker, in global logical coordinates."""
+        from PySide6.QtGui import QCursor, QGuiApplication
+
+        win, cfg = self.mascot_window, self.cfg
+        if cfg.mascot != "puppet" or not self.puppet.can_pose:
+            self.frame.pose = None
+            return
+        origin = win.mapToGlobal(win.rect().topLeft())
+        to_global = lambda pt: (origin.x() + pt.x(), origin.y() + pt.y())  # noqa: E731
+        rect = win._mascot
+        eyes = to_global(self.puppet.eye_anchor(rect))
+        if self.clicks is not None:
+            screen = QGuiApplication.primaryScreen()
+            # pynput reports physical pixels on X11 (logical points on macOS)
+            dpr = 1.0 if sys.platform == "darwin" or screen is None else screen.devicePixelRatio()
+            own = [win.frameGeometry()]
+            if self.panel is not None and self.panel.isVisible():
+                own.append(self.panel.frameGeometry())
+            while True:
+                try:
+                    x, y = self.clicks.clicks.get_nowait()
+                except queue.Empty:
+                    break
+                x, y = x / dpr, y / dpr
+                if any(g.contains(int(x), int(y)) for g in own):
+                    continue  # dragging the mascot or using the panel isn't "pointing"
+                shoulders = {s: to_global(self.puppet.shoulder_anchor(rect, s)) for s in ("left", "right")}
+                self.pointer.click(now, (x, y), shoulders, eyes)
+        if cfg.follow_mouse:
+            c = QCursor.pos()
+            cursor = (c.x(), c.y())
+        else:
+            cursor = eyes  # nothing to look at: eyes stay straight
+        self.frame.pose = self.pointer.update(now, dt, cursor, eyes)
+
     def sample_key_color(self):
         if self.camera:
             self.camera.pick_request = True
@@ -208,6 +263,7 @@ class Controller:
         f.t = now - self._t0
         f.openness = self.mouth.update(self.audio.level, dt)
         f.blink = self.blinker.update(f.t)
+        self._update_pose(now, dt)
 
         if self.camera is not None:
             rgba, fid = self.camera.latest()
@@ -347,6 +403,8 @@ class Controller:
 
     def shutdown(self):
         self.timer.stop()
+        if self.clicks is not None:
+            self.clicks.stop()
         self.cfg.save()
         if self.vcam is not None:
             self.vcam.close()

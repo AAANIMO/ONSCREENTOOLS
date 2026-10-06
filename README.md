@@ -5,8 +5,9 @@ assistants but useful. It floats over your screen, always on top, and
 talks when you talk.
 
 - **Puppet mode.** A construction-paper cutout kid whose jaw flaps in sync
-  with your mic. It blinks, bobs and wobbles its head while talking. Pick one
-  of five built-in characters or bring your own art.
+  with your mic. It blinks, bobs and wobbles its head while talking. Its **eyes
+  follow your mouse** while you move it, and it **points at wherever you click**
+  on screen. Pick one of five built-in characters or bring your own art.
 - **Photo cutout, Canadian style.** Load a PNG of a person (or any photo, and
   the AI removes the background), drag the cut onto the mouth, and the whole top
   of the head flaps open and bounces around chaotically while you talk, like
@@ -45,7 +46,9 @@ The first run downloads the Whisper model you picked. `small` is about 500 MB;
 downloaded on first use. Both are cached.
 
 **macOS:** the first time you run it, allow **Microphone** and **Camera** access
-for your terminal app (System Settings → Privacy & Security).
+for your terminal app (System Settings → Privacy & Security). For the puppet to
+point at your clicks, also allow **Input Monitoring** and **Accessibility**, then
+restart it.
 
 ## Use
 
@@ -75,6 +78,16 @@ On the mascot itself:
 | `S` | cycle subtitles: off, bubble, bottom |
 | `C` | clear subtitles |
 | `Ctrl/Cmd+Q` | quit |
+
+**Mouse awareness** (built-in puppets): while you move the mouse, the eyes
+glide toward the cursor and the head leans slightly toward it. A second after
+the mouse stops, they drift back to looking straight ahead. When you click
+anywhere on screen, the puppet raises the arm on that side and points at the
+spot for about 1.5 seconds. Turn either off in the control panel (*Eyes follow
+the mouse*, *Point at where I click*). Clicks are read with a global hook
+(`pynput`). On Linux that works on X11 and XWayland; native Wayland apps don't
+report clicks to other programs. Photo and custom-art puppets don't follow the
+mouse.
 
 When **click-through** is on, the mascot ignores the mouse so it can sit on
 top of what you're demoing. Turn it off again from the control panel or the

@@ -54,7 +54,7 @@ onscreen                               # puppet + comic bubble, control panel op
 onscreen --puppet hood                 # beanie, pompom, hood, hair, redhead
 onscreen --camera --bg ai              # you, background removed by AI
 onscreen --camera 1 --bg chroma        # camera #1 in front of a green screen
-onscreen --subs bottom --lang it       # bottom subtitles, Italian
+onscreen --subs bottom --lang en       # bottom subtitles, English (default: Italian)
 onscreen --model large-v3-turbo        # more accurate (needs a decent machine)
 onscreen --list-devices                # list microphones
 ```
@@ -176,6 +176,12 @@ of the image.
 
 - **The mouth flaps on background noise:** raise the *Noise gate*.
   **It barely opens:** raise the *Sensitivity*. Watch the level meter.
+- **Wrong language / gibberish:** subtitles default to **Italian**. Change the
+  *Spoken language* in the control panel, in the right-click menu, or with
+  `--lang en`. Avoid *Auto-detect*: Whisper guesses again on every short
+  snippet and can jump to other languages mid-sentence. For better Italian, use
+  a bigger model: `medium`, or `large-v3-turbo` (fast on Apple Silicon with MLX
+  or on an NVIDIA GPU).
 - **Subtitles lag:** use a smaller model (`base`, `tiny`, or the English-only
   `base.en`) and set the language instead of auto-detect. With an NVIDIA GPU,
   faster-whisper uses CUDA automatically. On Apple Silicon, `install.sh` adds MLX.

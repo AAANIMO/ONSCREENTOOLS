@@ -53,7 +53,7 @@ class Config:
     subtitles: str = "bubble"             # "off" | "bottom" | "bubble"
     whisper_backend: str = "auto"         # "auto" | "faster-whisper" | "mlx"
     whisper_model: str = "small"
-    language: str | None = None           # None = auto-detect, else "en", "it", ...
+    language: str | None = "it"           # spoken language ("it", "en", ...); None = auto-detect (unreliable)
     translate: bool = False               # translate to English
     font_family: str = ""                 # "" = pick a comic-ish font automatically
     font_size: int = 22
@@ -67,6 +67,8 @@ class Config:
     window_pos: list | None = None
     vcam: bool = False                    # also publish as virtual camera (pyvirtualcam)
 
+    config_version: int = 2
+
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
         path = path or config_dir() / "config.json"
@@ -79,6 +81,11 @@ class Config:
         for k, v in data.items():
             if k in known:
                 setattr(cfg, k, v)
+        if data.get("config_version", 1) < 2:
+            # v1 defaulted to auto-detect, which hops between languages mid-sentence
+            if data.get("language") is None:
+                cfg.language = "it"
+            cfg.config_version = 2
         return cfg
 
     def save(self, path: Path | None = None) -> None:

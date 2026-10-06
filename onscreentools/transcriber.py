@@ -25,9 +25,19 @@ _HALLUCINATIONS = {
 }
 
 
+# credits Whisper learned from subtitled videos and "hears" in silence
+_HALLUCINATION_RE = re.compile(r"amara\.org|qtss|sottotitoli (creati|a cura|e revisione)|"
+                               r"iscriviti al canale|subtitles by", re.I)
+
+# Partials use greedy decoding only; finals may retry warmer, but not so hot
+# that they drift into another language.
+TEMPS_PARTIAL = (0.0,)
+TEMPS_FINAL = (0.0, 0.2, 0.4)
+
+
 def _clean(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
-    if text.lower() in _HALLUCINATIONS:
+    if text.lower() in _HALLUCINATIONS or _HALLUCINATION_RE.search(text):
         return ""
     return text
 
@@ -54,6 +64,7 @@ class FasterWhisperBackend:
             language=self.language,
             task=self.task,
             beam_size=5 if final else 1,
+            temperature=TEMPS_FINAL if final else TEMPS_PARTIAL,
             condition_on_previous_text=False,
             initial_prompt=prompt or None,
             without_timestamps=True,
@@ -92,7 +103,8 @@ class MLXWhisperBackend:
 
     def __call__(self, audio: np.ndarray, prompt: str | None, final: bool) -> str:
         res = self._t(audio, path_or_hf_repo=self.repo, language=self.language, task=self.task,
-                      initial_prompt=prompt or None, condition_on_previous_text=False)
+                      initial_prompt=prompt or None, condition_on_previous_text=False,
+                      temperature=TEMPS_FINAL if final else TEMPS_PARTIAL)
         segs = [s for s in res.get("segments", [])
                 if not (s.get("no_speech_prob", 0) > 0.6 and s.get("avg_logprob", 0) < -1.0)]
         return _clean("".join(s.get("text", "") for s in segs))

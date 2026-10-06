@@ -292,3 +292,46 @@ def test_canadian_save_and_load(qapp, tmp_path):
     assert folder.name == "Mr-Test"
     pup = load_puppet(str(folder))
     assert isinstance(pup, CanadianPuppet) and pup.max_angle == 30 and pup.chaos == 1.5
+
+
+# ---------------------------------------------------------------- language
+def test_default_language_is_italian():
+    assert Config().language == "it"
+
+
+def test_old_config_with_auto_detect_migrates_to_italian(tmp_path):
+    (tmp_path / "c.json").write_text('{"language": null, "whisper_model": "small"}')
+    c = Config.load(tmp_path / "c.json")
+    assert c.language == "it" and c.config_version == 2
+
+
+def test_explicit_choices_survive(tmp_path):
+    (tmp_path / "a.json").write_text('{"language": "en"}')
+    assert Config.load(tmp_path / "a.json").language == "en"
+    # a v2 config where the user deliberately picked auto-detect keeps it
+    (tmp_path / "b.json").write_text('{"language": null, "config_version": 2}')
+    assert Config.load(tmp_path / "b.json").language is None
+
+
+def test_italian_subtitle_credit_hallucinations_are_dropped():
+    assert _clean("Sottotitoli e revisione a cura di QTSS") == ""
+    assert _clean("Sottotitoli creati dalla comunità Amara.org") == ""
+    assert _clean("Oggi vediamo come si centra un div.") == "Oggi vediamo come si centra un div."
+
+
+def test_backend_uses_greedy_partials(monkeypatch):
+    from onscreentools import transcriber as T
+
+    calls = []
+
+    class Model:
+        def transcribe(self, audio, **kw):
+            calls.append(kw)
+            return iter(()), type("I", (), {"language": "it", "language_probability": 1.0})()
+
+    b = T.FasterWhisperBackend.__new__(T.FasterWhisperBackend)
+    b.model, b.language, b.task = Model(), "it", "transcribe"
+    b(np.zeros(16000, np.float32), "", final=False)
+    b(np.zeros(16000, np.float32), "", final=True)
+    assert calls[0]["language"] == "it" and calls[0]["temperature"] == (0.0,)
+    assert max(calls[1]["temperature"]) <= 0.4

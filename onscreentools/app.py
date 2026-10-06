@@ -283,6 +283,14 @@ class Controller:
         add("Subtitles: off", lambda: self.set("subtitles", "off"), cfg.subtitles == "off")
         add("Subtitles: comic bubble", lambda: self.set("subtitles", "bubble"), cfg.subtitles == "bubble")
         add("Subtitles: bottom", lambda: self.set("subtitles", "bottom"), cfg.subtitles == "bottom")
+        from .panel import LANGUAGES
+
+        lang_menu = menu.addMenu("Spoken language")
+        for label, code in LANGUAGES:
+            a = lang_menu.addAction(label)
+            a.setCheckable(True)
+            a.setChecked(cfg.language == code)
+            a.triggered.connect(lambda _=False, c=code: self.set("language", c))
         menu.addSeparator()
         add("Click-through", lambda: self.set("click_through", not cfg.click_through), cfg.click_through)
         add("Controls…", self.show_panel)
@@ -369,7 +377,7 @@ def parse_args(argv=None):
     ap.add_argument("--bg", choices=["none", "chroma", "ai"], help="camera background removal")
     ap.add_argument("--subs", choices=["off", "bubble", "bottom"], help="subtitle style")
     ap.add_argument("--model", help="Whisper model (tiny, base, small, medium, large-v3, large-v3-turbo…)")
-    ap.add_argument("--lang", help="spoken language code (en, it, …); default auto-detect")
+    ap.add_argument("--lang", help="spoken language code (it, en, …) or 'auto'; default it")
     ap.add_argument("--size", type=int, help="mascot height in pixels")
     ap.add_argument("--window-bg", help="'transparent' or a colour like '#00b140' for keying in OBS")
     ap.add_argument("--vcam", action="store_true", help="also publish as a virtual camera (pyvirtualcam)")

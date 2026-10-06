@@ -11,9 +11,10 @@ from .puppet import PRESETS
 
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo",
                   "distil-large-v3", "tiny.en", "base.en", "small.en", "medium.en"]
-LANGUAGES = [("Auto-detect", None), ("English", "en"), ("Italiano", "it"), ("Español", "es"),
+LANGUAGES = [("Italiano", "it"), ("English", "en"), ("Español", "es"),
              ("Français", "fr"), ("Deutsch", "de"), ("Português", "pt"), ("Nederlands", "nl"),
-             ("Polski", "pl"), ("Русский", "ru"), ("日本語", "ja"), ("中文", "zh"), ("한국어", "ko")]
+             ("Polski", "pl"), ("Русский", "ru"), ("日本語", "ja"), ("中文", "zh"), ("한국어", "ko"),
+             ("Auto-detect (unreliable)", None)]
 BACKGROUNDS = [("Transparent (overlay)", "transparent"), ("Green #00b140 (for keying)", "#00b140"),
                ("Magenta #ff00ff (for keying)", "#ff00ff"), ("Black", "#000000"), ("White", "#ffffff")]
 
@@ -152,7 +153,10 @@ class ControlPanel(QWidget):
                                        cfg.bubble_side, lambda v: set_("bubble_side", v)))
         f.addRow("Model", _combo([(m, m) for m in WHISPER_MODELS], cfg.whisper_model,
                                  lambda v: set_("whisper_model", v)))
-        f.addRow("Language", _combo(LANGUAGES, cfg.language, lambda v: set_("language", v)))
+        self.lang_combo = _combo(LANGUAGES, cfg.language, lambda v: set_("language", v))
+        self.lang_combo.setToolTip("Set the language you speak. Auto-detect guesses per sentence "
+                                   "and can jump to random languages.")
+        f.addRow("Spoken language", self.lang_combo)
         cb = QCheckBox("Translate to English")
         cb.setChecked(cfg.translate)
         cb.toggled.connect(lambda v: set_("translate", v))
@@ -238,6 +242,11 @@ class ControlPanel(QWidget):
         self.meter.setValue(int(level01 * 100))
         self.whisper_status.setText(status)
         self.error_label.setText(error)
+        i = self.lang_combo.findData(self.ctl.cfg.language)
+        if i >= 0 and i != self.lang_combo.currentIndex():
+            self.lang_combo.blockSignals(True)
+            self.lang_combo.setCurrentIndex(i)
+            self.lang_combo.blockSignals(False)
         if self.key_btn.text() != "#%02x%02x%02x" % tuple(self.ctl.cfg.chroma_color):
             self._paint_key_btn()
         if self.size_slider.value() != self.ctl.cfg.mascot_size:

@@ -1,0 +1,230 @@
+import os
+
+import numpy as np
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from onscreentools.audio import WHISPER_RATE, _resample
+from onscreentools.camera import chroma_key
+from onscreentools.config import Config
+from onscreentools.lipsync import MouthDriver, quantize
+from onscreentools.transcriber import SubtitleState, Transcriber, _clean
+
+
+# ---------------------------------------------------------------- lipsync
+def test_mouth_opens_on_loud_and_closes_on_silence():
+    m = MouthDriver(gate_db=-50, range_db=30)
+    for _ in range(30):
+        m.update(0.2, 1 / 60)
+    assert m.value > 0.5 and m.talking
+    for _ in range(60):
+        m.update(0.0, 1 / 60)
+    assert m.value == 0.0 and not m.talking
+
+
+def test_noise_below_gate_keeps_mouth_shut():
+    m = MouthDriver(gate_db=-50, range_db=30)
+    for _ in range(60):
+        m.update(10 ** (-60 / 20), 1 / 60)
+    assert m.value == 0.0
+
+
+def test_quantize():
+    assert quantize(0.0, 4) == 0
+    assert quantize(0.2, 4) == 1
+    assert quantize(1.0, 4) == 3
+    assert quantize(0.9, 1) == 0
+
+
+# ---------------------------------------------------------------- audio
+def test_resample_length():
+    x = np.random.rand(48000).astype(np.float32)
+    assert len(_resample(x, 48000, 16000)) == 16000
+
+
+# ---------------------------------------------------------------- keying
+def test_chroma_key_removes_green_keeps_skin():
+    frame = np.zeros((10, 20, 3), np.uint8)
+    frame[:, :10] = (0, 177, 64)        # green screen
+    frame[:, 10:] = (224, 172, 140)     # skin
+    out = chroma_key(frame, (0, 177, 64), tolerance=40, softness=25, spill=0.8)
+    assert out.shape == (10, 20, 4)
+    assert out[:, :10, 3].max() == 0
+    assert out[:, 10:, 3].min() == 255
+    # skin isn't touched by spill suppression (green isn't its dominant channel)
+    assert tuple(out[0, 15, :3]) == (224, 172, 140)
+
+
+def test_chroma_key_handles_shadowed_screen():
+    shadow = np.full((4, 4, 3), (0, 110, 40), np.uint8)  # darker green
+    out = chroma_key(shadow, (0, 177, 64), tolerance=40, softness=25)
+    assert out[..., 3].max() < 128
+
+
+# ---------------------------------------------------------------- whisper streaming
+class FakeBackend:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, audio, prompt, final):
+        self.calls.append((len(audio) / WHISPER_RATE, final))
+        return "hello world" if final else "hello"
+
+
+def _tone(seconds, amp=0.2):
+    t = np.arange(int(seconds * WHISPER_RATE)) / WHISPER_RATE
+    return (amp * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+
+
+def _run(tr, audio, chunk=320):
+    for i in range(0, len(audio), chunk):
+        tr.feed(audio[i:i + chunk])
+        tr.tick()
+
+
+def test_transcriber_partials_then_final():
+    tr = Transcriber(None, None, gate_db=-50)
+    tr._reset()
+    tr.backend = FakeBackend()
+    audio = np.concatenate([np.zeros(8000, np.float32), _tone(2.0), np.zeros(16000, np.float32)])
+    _run(tr, audio)
+    events = []
+    while not tr.out.empty():
+        events.append(tr.out.get())
+    assert ("partial", "hello") in events
+    assert events[-1] == ("final", "hello world")
+    assert sum(1 for _, f in tr.backend.calls if f) == 1
+    # utterance includes some pre-roll but not all the leading silence
+    final_len = [d for d, f in tr.backend.calls if f][0]
+    assert 2.0 <= final_len <= 3.0
+
+
+def test_transcriber_ignores_silence():
+    tr = Transcriber(None, None, gate_db=-50)
+    tr._reset()
+    tr.backend = FakeBackend()
+    _run(tr, np.zeros(WHISPER_RATE * 3, np.float32))
+    assert tr.backend.calls == [] and tr.out.empty()
+
+
+def test_transcriber_splits_long_utterances():
+    tr = Transcriber(None, None, gate_db=-50, max_utterance=3.0)
+    tr._reset()
+    tr.backend = FakeBackend()
+    _run(tr, _tone(7.0))
+    assert sum(1 for _, f in tr.backend.calls if f) == 2
+
+
+def test_hallucination_filter():
+    assert _clean(" Thanks for watching! ") == ""
+    assert _clean("  so   this is   real ") == "so this is real"
+
+
+def test_subtitle_state_accumulates_and_fades():
+    s = SubtitleState(hide_after=2.0, max_chars=40)
+    s.push("partial", "hello", now=0.0)
+    assert s.text() == "hello" and s.opacity(now=0.1) == 1.0
+    s.push("final", "hello there.", now=0.5)
+    s.push("final", "how are you?", now=1.0)
+    assert s.text() == "hello there. how are you?"
+    assert s.opacity(now=2.5) == 1.0
+    assert s.opacity(now=10.0) == 0.0
+    # after a long pause a new caption starts fresh
+    s.push("partial", "next", now=10.0)
+    assert s.text() == "next"
+
+
+def test_subtitle_state_truncates_on_word_boundary():
+    s = SubtitleState(max_chars=20)
+    s.push("final", "one two three four five six seven eight", now=0)
+    t = s.text()
+    assert t.startswith("…") and len(t) <= 21 and "eight" in t
+
+
+# ---------------------------------------------------------------- config
+def test_config_roundtrip(tmp_path):
+    c = Config(mascot="camera", language="it", chroma_color=[1, 2, 3])
+    c.save(tmp_path / "c.json")
+    d = Config.load(tmp_path / "c.json")
+    assert d.mascot == "camera" and d.language == "it" and d.chroma_color == [1, 2, 3]
+
+
+def test_config_ignores_unknown_and_bad_files(tmp_path):
+    (tmp_path / "c.json").write_text('{"nope": 1, "mascot_size": 500}')
+    assert Config.load(tmp_path / "c.json").mascot_size == 500
+    (tmp_path / "bad.json").write_text("{not json")
+    assert Config.load(tmp_path / "bad.json").mascot == "puppet"
+
+
+# ---------------------------------------------------------------- rendering
+@pytest.fixture(scope="module")
+def qapp():
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.instance() or QApplication([])
+
+
+def _render(puppet, openness, w=200, h=240):
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QImage, QPainter
+
+    img = QImage(w, h, QImage.Format_ARGB32)
+    img.fill(0)
+    p = QPainter(img)
+    puppet.draw(p, QRectF(0, 0, w, h), openness, 0.0, 0.0)
+    p.end()
+    return img
+
+
+def test_builtin_puppets_draw_and_mouth_moves(qapp):
+    from onscreentools.puppet import PRESETS, BuiltinPuppet
+
+    for name in PRESETS:
+        pup = BuiltinPuppet(name)
+        closed, opened = _render(pup, 0.0), _render(pup, 1.0)
+        assert not closed.isNull()
+        assert closed != opened, name
+
+
+def test_export_and_load_image_puppet(qapp, tmp_path):
+    from onscreentools.puppet import ImagePuppet, export_template, load_puppet
+
+    folder = export_template("beanie", tmp_path / "pup", height=240)
+    pup = load_puppet(str(folder))
+    assert isinstance(pup, ImagePuppet)
+    assert len(pup.mouths) == 4 and pup.blink_img is not None
+    assert _render(pup, 0.0) != _render(pup, 1.0)
+
+
+def test_recoloured_builtin_puppet(qapp, tmp_path):
+    from onscreentools.puppet import BuiltinPuppet, load_puppet
+
+    (tmp_path / "puppet.json").write_text('{"type": "builtin", "base": "hood", "hat": "#ff00aa"}')
+    pup = load_puppet(str(tmp_path))
+    assert isinstance(pup, BuiltinPuppet) and pup.s["hat"] == "#ff00aa"
+
+
+def test_unknown_puppet_raises():
+    from onscreentools.puppet import load_puppet
+
+    with pytest.raises(ValueError):
+        load_puppet("/definitely/not/here")
+
+
+def test_bubble_and_bottom_subtitles_paint(qapp):
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QImage, QPainter
+
+    from onscreentools.render import draw_bottom_subtitles, draw_bubble, pick_font
+
+    img = QImage(600, 400, QImage.Format_ARGB32)
+    img.fill(0)
+    p = QPainter(img)
+    font = pick_font("", 22)
+    rect = draw_bubble(p, "a fairly long sentence that needs to wrap " * 3, font,
+                       QRectF(0, 0, 400, 250), QPointF(450, 330))
+    draw_bottom_subtitles(p, QRectF(0, 0, 600, 400), "bottom text", font)
+    p.end()
+    assert rect is not None and rect.width() <= 400 and rect.top() >= 0
+    assert img.pixelColor(int(rect.center().x()), int(rect.center().y())).alpha() == 255

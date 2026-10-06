@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onscreentools"
+version = "0.1.0"
+description = "Talking on-screen mascot for tutorials: lip-synced cutout puppet or your keyed webcam, with live Whisper subtitles."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PySide6>=6.6",
+    "numpy>=1.24",
+    "sounddevice>=0.4.6",
+    "opencv-python>=4.8",
+    "faster-whisper>=1.0",
+]
+
+[project.optional-dependencies]
+ai = ["mediapipe>=0.10.14"]          # AI background removal (no green screen needed)
+mlx = ["mlx-whisper>=0.4"]           # faster Whisper on Apple Silicon
+vcam = ["pyvirtualcam>=0.11"]        # send the mascot out as a virtual webcam
+all = ["mediapipe>=0.10.14", "pyvirtualcam>=0.11"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+onscreen = "onscreentools.app:main"
+
+[tool.setuptools.packages.find]
+include = ["onscreentools*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+onscreentools = ["fonts/*"]

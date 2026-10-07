@@ -91,8 +91,8 @@ spot for about 1.5 seconds. Both are toggles: `E` and `F` on the mascot, the
 right-click menu, the control panel, or `--no-follow-mouse` / `--no-point` at
 startup. The choice is remembered. Clicks are read with a global hook
 (`pynput`). On Linux that works on X11 and XWayland; native Wayland apps don't
-report clicks to other programs. Photo and custom-art puppets don't follow the
-mouse.
+report clicks to other programs. Photo cutouts follow the mouse too if you
+gave them eyes and/or hands in the editor; frame/jaw custom-art puppets don't.
 
 When **click-through** is on, the mascot ignores the mouse so it can sit on
 top of what you're demoing. Turn it off again from the control panel or the
@@ -118,6 +118,9 @@ onscreen --cutout ~/Pictures/me.png
 
 Or click **New from PNG…** in the control panel. In the editor:
 
+![cutout editor](docs/cutout-editor.png)
+
+
 1. Drag the two **red** handles onto the mouth line, one on each side of the
    face. Everything above the line flaps.
 2. **Pivot:** by default the head pivots on one end of the line or the other,
@@ -129,7 +132,16 @@ Or click **New from PNG…** in the control panel. In the editor:
 4. The gap under the lifted head is **see-through** by default. Tick *Dark
    mouth* to paint it with a colour. If the photo itself has no transparency,
    click **Remove background (AI)**.
-5. Save. The puppet goes into `puppets/<name>` in the config folder and shows up
+5. **Eyes** (optional): tick *Eyes* and drag the two **blue** handles where the
+   eyes go. Cartoon eyes are drawn over the photo. They lift with the head when it
+   flaps, blink, and follow the mouse. Set their size and the eyelid colour,
+   which is sampled from the skin automatically.
+6. **Hands** (optional): tick *Hands* and drag the two **green** handles onto
+   the shoulders. Arms hang from there and point at your clicks, like the
+   built-in puppets. Set the arm length and the sleeve and hand colours.
+   In the preview, move the mouse over it to test the eyes, and click to test
+   pointing.
+7. Save. The puppet goes into `puppets/<name>` in the config folder and shows up
    in the *Character* list as "(mine)".
 
 Works with front-facing photos as well as profiles. Crop at the chest for the
@@ -184,8 +196,13 @@ fraction of the canvas. The speech-bubble tail points at it.
  "max_angle": 28,
  "chaos": 1.0,
  "mouth_fill": false,
- "mouth_color": "#1a0505"}
+ "mouth_color": "#1a0505",
+ "eyes": {"left": [0.42, 0.33], "right": [0.58, 0.33], "size": 0.05},
+ "hands": {"left": [0.25, 0.75], "right": [0.75, 0.75], "length": 0.16,
+           "sleeve": "#3355aa", "skin": "#e8b48f"}}
 ```
+
+`eyes` and `hands` are optional (leave them out or set them to `null`).
 
 `a` and `b` are the two ends of the mouth line, as fractions of the image.
 `pivot` is `random`, `left` or `right`.

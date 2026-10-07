@@ -494,3 +494,77 @@ def test_paused_transcriber_skips_whisper():
     _t.sleep(0.2)
     tr.stop()
     assert backend.calls == [] and tr.out.empty()
+
+
+# ---------------------------------------------------------------- cutout eyes & hands
+_EYES = {"left": [0.4, 0.25], "right": [0.6, 0.25], "size": 0.06}
+_HANDS = {"left": [0.2, 0.7], "right": [0.8, 0.7], "length": 0.15, "sleeve": "#00ff00", "skin": "#ff00ff"}
+
+
+def _render_pup(pup, o=0.0, blink=0.0, pose=None, w=300, h=250):
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QImage, QPainter
+
+    img = QImage(w, h, QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)
+    p = QPainter(img)
+    pup.draw(p, QRectF(0, 0, w, h), o, 0.0, blink, pose)
+    p.end()
+    return img
+
+
+def test_cutout_without_extras_cannot_pose(qapp):
+    from onscreentools.cutout import CanadianPuppet
+
+    assert not CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45]).can_pose
+
+
+def test_cutout_eyes_follow_mouse_and_blink(qapp):
+    from onscreentools.cutout import CanadianPuppet
+    from onscreentools.pointer import Pose
+
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45], eyes=_EYES)
+    assert pup.can_pose
+    base = _render_pup(pup)
+    assert _render_pup(pup, pose=Pose(look_x=1.0)) != base
+    assert _render_pup(pup, blink=1.0) != base
+
+
+def test_cutout_eyes_ride_along_with_the_head(qapp):
+    from onscreentools.cutout import CanadianPuppet
+
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45], chaos=0.0, pivot="left", eyes=_EYES)
+    T = pup.head_transform(1.0, 0.0, "left")
+    right_eye = pup.eyes["right"]
+    assert pup._above_cut(right_eye)
+    assert T.map(right_eye).y() < right_eye.y() - 5   # the eye lifts with the skull
+
+
+def test_cutout_hands_point(qapp):
+    import math
+
+    from PySide6.QtCore import QRectF
+
+    from onscreentools.cutout import CanadianPuppet
+    from onscreentools.pointer import Pose
+
+    pup = CanadianPuppet(_person(qapp), [0.3, 0.45], [0.7, 0.45], hands=_HANDS)
+    assert pup.can_pose and pup.aspect > 200 / 250        # side margin for the arms
+    rect = QRectF(0, 0, 300, 250)
+    assert pup.shoulder_anchor(rect, "left").x() < pup.shoulder_anchor(rect, "right").x()
+    rest = _render_pup(pup)
+    pointing = _render_pup(pup, pose=Pose(point_amount=1.0, point_angle=-math.pi / 2, point_side="right"))
+    assert rest != pointing
+
+
+def test_cutout_extras_save_and_load(qapp, tmp_path):
+    from onscreentools.cutout import save_cutout
+    from onscreentools.puppet import load_puppet
+
+    folder = save_cutout(_person(qapp), "x", [0.3, 0.45], [0.7, 0.45], 28, 1.0, "#000000",
+                         root=tmp_path, eyes=_EYES, hands=_HANDS)
+    pup = load_puppet(str(folder))
+    assert pup.eyes and pup.hands and pup.hands["sleeve"].name() == "#00ff00"
+    plain = load_puppet(str(save_cutout(_person(qapp), "y", [0.3, 0.45], [0.7, 0.45], 28, 1.0,
+                                        "#000000", root=tmp_path)))
+    assert plain.eyes is None and plain.hands is None

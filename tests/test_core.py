@@ -568,3 +568,55 @@ def test_cutout_extras_save_and_load(qapp, tmp_path):
     plain = load_puppet(str(save_cutout(_person(qapp), "y", [0.3, 0.45], [0.7, 0.45], 28, 1.0,
                                         "#000000", root=tmp_path)))
     assert plain.eyes is None and plain.hands is None
+
+
+def test_hold_keeps_arm_up_and_tracks_cursor_until_release():
+    import math
+
+    from onscreentools.pointer import PointAnim, PointerTracker
+
+    tr = PointerTracker()
+    shoulders = {"left": (480, 560), "right": (520, 560)}
+    eyes = (500, 500)
+    pose, t = None, 0.0
+    # held far longer than a click's hold: the arm must stay up and follow
+    for i in range(1, 300):
+        t = i / 60
+        target = (900, 100 + i * 2)
+        tr.hold(t, target, shoulders, eyes)
+        pose = tr.update(t, 1 / 60, target, eyes)
+    assert pose.point_side == "right" and pose.point_amount == 1.0
+    assert math.isclose(pose.point_angle, math.atan2(target[1] - 560, target[0] - 520))
+    assert pose.look_x > 0.3                                  # looks where it points
+    tr.release(t)
+    assert tr.update(t + PointAnim.LINGER / 2, 1 / 60, target, eyes).point_amount == 1.0
+    end = t + PointAnim.LINGER + PointAnim.LOWER + 0.02
+    assert tr.update(end, 1 / 60, target, eyes).point_amount == 0.0
+    assert not tr.point.active
+
+
+def test_hold_swaps_arms_with_hysteresis():
+    from onscreentools.pointer import PointerTracker
+
+    tr = PointerTracker()
+    shoulders = {"left": (480, 560), "right": (520, 560)}
+    eyes = (500, 500)
+    tr.hold(0.0, (800, 300), shoulders, eyes)
+    assert tr.point.side == "right"
+    tr.hold(0.5, (500 - tr.SIDE_MARGIN / 2, 300), shoulders, eyes)   # barely across: keep the arm
+    assert tr.point.side == "right"
+    tr.hold(1.0, (200, 300), shoulders, eyes)
+    assert tr.point.side == "left"
+    assert tr.point.amount(1.01) < 1.0                        # the new arm raises from rest
+
+
+def test_parse_hold_keys():
+    import pytest
+
+    from onscreentools.pointer import parse_hold_keys
+
+    assert parse_hold_keys("ctrl+alt") == {"ctrl", "alt"}
+    assert parse_hold_keys(" Option + Command ") == {"alt", "cmd"}
+    assert parse_hold_keys("") == frozenset()
+    with pytest.raises(ValueError):
+        parse_hold_keys("ctrl+k")

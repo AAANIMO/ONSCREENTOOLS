@@ -7,6 +7,9 @@
 * Pointing: clicks anywhere on screen need a global hook (pynput). On
   macOS that asks for Input Monitoring permission; on Linux it works on
   X11/XWayland. Without it the puppet still points at clicks on itself.
+* Hold to point: while a modifier combo is held the arm stays up and the
+  finger tracks the cursor. Modifier state is polled, so it needs no hook
+  and no permission.
 """
 from __future__ import annotations
 
@@ -52,11 +55,13 @@ class PointAnim:
     """Raise → hold → lower, timed to be snappy but clearly visible."""
 
     RAISE, HOLD, LOWER = 0.18, 1.3, 0.35
+    LINGER = 0.15  # hold this long after the keys are released, then lower
 
     def __init__(self):
         self.t0: float | None = None
         self.angle = 0.0
         self.side = "right"
+        self.held = False
 
     def trigger(self, now: float, angle: float, side: str):
         if self.t0 is not None and side == self.side and now - self.t0 < self.RAISE + self.HOLD:
@@ -66,12 +71,29 @@ class PointAnim:
             self.t0 = now
         self.angle, self.side = angle, side
 
+    def hold(self, now: float, angle: float, side: str):
+        """Keep the arm up and aimed at `angle` until release()."""
+        lowering = self.t0 is not None and now - self.t0 >= self.RAISE + self.HOLD
+        if self.t0 is None or lowering or side != self.side:
+            self.t0 = now
+        self.held = True
+        self.angle, self.side = angle, side
+
+    def release(self, now: float):
+        if not self.held:
+            return
+        self.held = False
+        if self.t0 is not None and now - self.t0 >= self.RAISE:
+            self.t0 = now - self.RAISE - (self.HOLD - self.LINGER)
+
     def amount(self, now: float) -> float:
         if self.t0 is None:
             return 0.0
         k = now - self.t0
         if k < self.RAISE:
             return max(0.0, _ease_out_back(k / self.RAISE))
+        if self.held:
+            return 1.0
         k -= self.RAISE
         if k < self.HOLD:
             return 1.0
@@ -126,8 +148,35 @@ class ClickListener:
             self._listener = None
 
 
+def parse_hold_keys(combo: str) -> frozenset:
+    """'ctrl+alt' -> {'ctrl', 'alt'}. Accepts option/opt, cmd/meta/super/win as aliases."""
+    alias = {"control": "ctrl", "option": "alt", "opt": "alt",
+             "command": "cmd", "meta": "cmd", "super": "cmd", "win": "cmd"}
+    keys = {alias.get(k, k) for k in (p.strip().lower() for p in (combo or "").split("+")) if k}
+    unknown = keys - {"ctrl", "alt", "shift", "cmd"}
+    if unknown:
+        raise ValueError(f"Unknown hold key(s): {', '.join(sorted(unknown))}. Use ctrl, alt, shift, cmd.")
+    return frozenset(keys)
+
+
+def held_modifiers() -> frozenset:
+    """Modifier keys physically down right now, even when another app has focus."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QGuiApplication
+
+    mods = QGuiApplication.queryKeyboardModifiers()
+    # Qt swaps Control and Meta on macOS so that Cmd acts as "Ctrl"
+    ctrl, cmd = Qt.ControlModifier, Qt.MetaModifier
+    if sys.platform == "darwin":
+        ctrl, cmd = cmd, ctrl
+    names = (("ctrl", ctrl), ("alt", Qt.AltModifier), ("shift", Qt.ShiftModifier), ("cmd", cmd))
+    return frozenset(n for n, m in names if mods & m)
+
+
 class PointerTracker:
     """Turns cursor motion and clicks into a Pose for the puppet."""
+
+    SIDE_MARGIN = 30.0  # px past the eyes before a held point swaps arms
 
     def __init__(self, idle_after: float = 0.9, reach: float = 260.0):
         self.idle_after = idle_after    # seconds of stillness before looking straight again
@@ -145,6 +194,19 @@ class PointerTracker:
         angle = math.atan2(target[1] - sy, target[0] - sx)
         self.point.trigger(now, angle, side)
         self._look_target = target
+
+    def hold(self, now: float, target, shoulders: dict, eyes):
+        """Call every frame while the hold keys are down: the finger tracks `target`."""
+        side = "left" if target[0] < eyes[0] else "right"
+        if self.point.held and side != self.point.side and abs(target[0] - eyes[0]) < self.SIDE_MARGIN:
+            side = self.point.side  # don't flap between arms right under the nose
+        sx, sy = shoulders[side]
+        angle = math.atan2(target[1] - sy, target[0] - sx)
+        self.point.hold(now, angle, side)
+        self._look_target = target
+
+    def release(self, now: float):
+        self.point.release(now)
 
     def update(self, now: float, dt: float, cursor, eyes) -> Pose:
         if self._last_cursor is not None and cursor != self._last_cursor:

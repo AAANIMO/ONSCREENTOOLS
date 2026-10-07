@@ -72,14 +72,16 @@ On the mascot itself:
 | action | does |
 |---|---|
 | drag | move it |
-| scroll wheel, `+` / `-` | resize |
-| right-click | menu: puppet/camera, subtitles on/off and style, language, mouse toggles, click-through, quit |
+| scroll wheel, `+` / `-` | resize (unless the dimension is locked) |
+| right-click | menu: puppet/camera, subtitles on/off and style, language, mouse toggles, lock dimension, click-through, quit |
 | double-click, `P` | open the control panel |
 | `M` | switch between puppet and camera |
 | `S` | subtitles on/off (Whisper stays loaded, so it's instant) |
 | `B` | subtitle style: comic bubble or bottom of screen |
 | `E` | eyes follow the mouse: on/off |
 | `F` | point at clicks: on/off |
+| `H` | hold keys to point: on/off |
+| `L` | lock dimension: scroll wheel and `+` / `-` stop resizing |
 | `C` | clear subtitles |
 | `Ctrl/Cmd+Q` | quit |
 
@@ -93,6 +95,13 @@ startup. The choice is remembered. Clicks are read with a global hook
 (`pynput`). On Linux that works on X11 and XWayland; native Wayland apps don't
 report clicks to other programs. Photo cutouts follow the mouse too if you
 gave them eyes and/or hands in the editor; frame/jaw custom-art puppets don't.
+
+**Hold to point:** hold **Ctrl+Option** (Ctrl+Alt on Linux) and the puppet
+raises its arm and keeps its finger on the cursor for as long as you hold the
+keys, swapping arms when you cross over. Let go and the arm drops. This polls
+the modifier keys, so it needs no permission on macOS. Change the combo with
+`"point_hold_keys"` in the config file (modifiers only: `ctrl`, `alt`, `shift`,
+`cmd`, joined with `+`).
 
 When **click-through** is on, the mascot ignores the mouse so it can sit on
 top of what you're demoing. Turn it off again from the control panel or the

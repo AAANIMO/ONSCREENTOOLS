@@ -37,9 +37,14 @@ class Controller:
             self.errors["puppet"] = str(e)
             self.puppet = BuiltinPuppet("beanie")
         self.blinker = Blinker()
-        from .pointer import ClickListener, PointerTracker
+        from .pointer import ClickListener, PointerTracker, parse_hold_keys
 
         self.pointer = PointerTracker()
+        try:
+            self._hold_keys = parse_hold_keys(cfg.point_hold_keys)
+        except ValueError as e:
+            self.errors["hold_keys"] = str(e)
+            self._hold_keys = frozenset()
         self.clicks = None
         self._ClickListener = ClickListener
         self.mouth = MouthDriver(cfg.noise_gate_db, cfg.mouth_range_db)
@@ -147,6 +152,9 @@ class Controller:
             if not value:
                 self.pointer.point.t0 = None  # drop the arm right away
             self._sync_clicks()
+        elif key == "point_on_hold":
+            if not value:
+                self.pointer.release(time.monotonic())
         elif key == "hide_after":
             self.subs.hide_after = value
         self.save_soon()
@@ -227,6 +235,8 @@ class Controller:
         """Feed cursor + clicks to the tracker, in global logical coordinates."""
         from PySide6.QtGui import QCursor, QGuiApplication
 
+        from .pointer import held_modifiers
+
         win, cfg = self.mascot_window, self.cfg
         if cfg.mascot != "puppet" or not self.puppet.can_pose:
             self.frame.pose = None
@@ -235,6 +245,13 @@ class Controller:
         to_global = lambda pt: (origin.x() + pt.x(), origin.y() + pt.y())  # noqa: E731
         rect = win._mascot
         eyes = to_global(self.puppet.eye_anchor(rect))
+        c = QCursor.pos()
+        holding = bool(cfg.point_on_hold and self._hold_keys and held_modifiers() == self._hold_keys)
+        if holding:
+            shoulders = {s: to_global(self.puppet.shoulder_anchor(rect, s)) for s in ("left", "right")}
+            self.pointer.hold(now, (c.x(), c.y()), shoulders, eyes)
+        else:
+            self.pointer.release(now)
         if self.clicks is not None:
             screen = QGuiApplication.primaryScreen()
             # pynput reports physical pixels on X11 (logical points on macOS)
@@ -248,12 +265,11 @@ class Controller:
                 except queue.Empty:
                     break
                 x, y = x / dpr, y / dpr
-                if any(g.contains(int(x), int(y)) for g in own):
+                if holding or any(g.contains(int(x), int(y)) for g in own):
                     continue  # dragging the mascot or using the panel isn't "pointing"
                 shoulders = {s: to_global(self.puppet.shoulder_anchor(rect, s)) for s in ("left", "right")}
                 self.pointer.click(now, (x, y), shoulders, eyes)
         if cfg.follow_mouse:
-            c = QCursor.pos()
             cursor = (c.x(), c.y())
         else:
             cursor = eyes  # nothing to look at: eyes stay straight
@@ -371,7 +387,9 @@ class Controller:
         menu.addSeparator()
         add("Eyes follow the mouse\tE", lambda: self.set("follow_mouse", not cfg.follow_mouse), cfg.follow_mouse)
         add("Point at clicks\tF", lambda: self.set("point_on_click", not cfg.point_on_click), cfg.point_on_click)
+        add("Hold keys to point\tH", lambda: self.set("point_on_hold", not cfg.point_on_hold), cfg.point_on_hold)
         menu.addSeparator()
+        add("Lock dimension\tL", lambda: self.set("lock_size", not cfg.lock_size), cfg.lock_size)
         add("Click-through", lambda: self.set("click_through", not cfg.click_through), cfg.click_through)
         add("Controls…", self.show_panel)
         menu.addSeparator()
@@ -421,10 +439,16 @@ class Controller:
             self.set("follow_mouse", not cfg.follow_mouse)
         elif k == Qt.Key_F:
             self.set("point_on_click", not cfg.point_on_click)
+        elif k == Qt.Key_H:
+            self.set("point_on_hold", not cfg.point_on_hold)
         elif k == Qt.Key_C:
             self.clear_subtitles()
         elif k == Qt.Key_P:
             self.show_panel()
+        elif k == Qt.Key_L:
+            self.set("lock_size", not cfg.lock_size)
+        elif cfg.lock_size and k in (Qt.Key_Plus, Qt.Key_Equal, Qt.Key_Minus):
+            pass
         elif k in (Qt.Key_Plus, Qt.Key_Equal):
             self.set("mascot_size", min(1400, int(cfg.mascot_size * 1.1)))
         elif k == Qt.Key_Minus:

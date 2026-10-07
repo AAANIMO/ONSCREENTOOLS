@@ -187,6 +187,8 @@ class MascotWindow(QWidget):
         self.ctl.save_soon()
 
     def wheelEvent(self, e):
+        if self.ctl.cfg.lock_size:
+            return
         step = 1 if e.angleDelta().y() > 0 else -1
         self.ctl.set("mascot_size", max(120, min(1400, int(self.ctl.cfg.mascot_size * (1 + 0.08 * step)))))
 

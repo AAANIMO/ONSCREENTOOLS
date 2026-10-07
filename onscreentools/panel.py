@@ -88,7 +88,9 @@ class ControlPanel(QWidget):
         for key, label, tip in (
                 ("follow_mouse", "Eyes follow the mouse  [E]", "Toggle also with E on the mascot or the right-click menu"),
                 ("point_on_click", "Point at where I click  [F]",
-                 "Toggle also with F. Needs Input Monitoring permission on macOS; works on X11/XWayland on Linux")):
+                 "Toggle also with F. Needs Input Monitoring permission on macOS; works on X11/XWayland on Linux"),
+                ("point_on_hold", f"Hold {cfg.point_hold_keys} to point at the cursor  [H]",
+                 "The arm stays up and the finger follows the mouse until you let go. Toggle also with H")):
             cb = QCheckBox(label)
             cb.setToolTip(tip)
             cb.setChecked(getattr(cfg, key))
@@ -199,6 +201,10 @@ class ControlPanel(QWidget):
         g = QGroupBox("Window")
         f = QFormLayout(g)
         f.addRow("Background", _combo(BACKGROUNDS, cfg.window_bg, lambda v: set_("window_bg", v)))
+        cb = QCheckBox("Lock dimension (scroll and +/- don't resize)  [L]")
+        cb.setChecked(cfg.lock_size)
+        cb.toggled.connect(lambda v: set_("lock_size", v))
+        f.addRow("", cb)
         cb = QCheckBox("Click-through (lock in place)")
         cb.setChecked(cfg.click_through)
         cb.toggled.connect(lambda v: set_("click_through", v))

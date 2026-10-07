@@ -48,6 +48,8 @@ class Config:
     audio_device: str | None = None       # sounddevice name or index; None = system default
     follow_mouse: bool = True             # puppet's eyes follow the cursor while it moves
     point_on_click: bool = True           # puppet points at where you click (global hook)
+    point_on_hold: bool = True            # hold point_hold_keys: the finger follows the cursor
+    point_hold_keys: str = "ctrl+alt"     # modifiers only: ctrl, alt, shift, cmd
     noise_gate_db: float = -50.0          # below this the mouth stays shut
     mouth_range_db: float = 28.0          # dB above the gate for a fully open mouth
 
@@ -67,6 +69,7 @@ class Config:
     # window
     window_bg: str = "transparent"        # "transparent" | "#00b140" | any colour
     click_through: bool = False
+    lock_size: bool = False               # scroll wheel and +/- no longer resize the mascot
     window_pos: list | None = None
     vcam: bool = False                    # also publish as virtual camera (pyvirtualcam)
 
